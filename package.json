@@ -9,5 +9,14 @@
     "dev:api": "npm run dev -w apps/api",
     "build": "npm run build -w apps/web && npm run build -w apps/api",
     "lint": "npm run lint -w apps/web && npm run lint -w apps/api"
+  },
+  "allowScripts": {
+    "@prisma/client@5.22.0": true,
+    "@prisma/engines@5.22.0": true,
+    "esbuild@0.28.2": true,
+    "prisma@5.22.0": true,
+    "unrs-resolver@1.12.2": true,
+    "esbuild@0.18.20": true,
+    "esbuild@0.25.12": true
   }
 }
