@@ -85,7 +85,7 @@ materialsRouter.post<{ subjectId: string }>("/text", async (req, res) => {
         sourceQuote: q.source.quote,
       })
       .returning();
-    savedQuestions.push(saved);
+    savedQuestions.push({ ...saved, topic: { id: topicRow.id, name: topicRow.name } });
   }
 
   res.status(201).json({ material, questions: savedQuestions });

@@ -1,0 +1,80 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { apiFetch, ApiError } from "@/lib/api";
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      await apiFetch("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+      router.push("/");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Algo salió mal, probá de nuevo");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-1 items-center justify-center px-4">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-sm"
+      >
+        <h1 className="font-display text-2xl font-semibold">Iniciar sesión</h1>
+        <p className="mt-1 text-sm text-ciruela/60">Tu material. Tu aprendizaje.</p>
+
+        <label className="mt-6 block text-sm font-medium">
+          Email
+          <input
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-ciruela/15 px-3 py-2 outline-none focus:border-turquesa"
+          />
+        </label>
+
+        <label className="mt-4 block text-sm font-medium">
+          Contraseña
+          <input
+            type="password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-ciruela/15 px-3 py-2 outline-none focus:border-turquesa"
+          />
+        </label>
+
+        {error && <p className="mt-4 text-sm text-wine">{error}</p>}
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="mt-6 w-full rounded-full bg-ciruela py-2.5 font-medium text-oat transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {loading ? "Entrando..." : "Entrar"}
+        </button>
+
+        <p className="mt-4 text-center text-sm text-ciruela/60">
+          ¿No tenés cuenta?{" "}
+          <Link href="/register" className="font-medium text-teal-deep">
+            Registrate
+          </Link>
+        </p>
+      </form>
+    </div>
+  );
+}

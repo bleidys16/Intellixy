@@ -1,26 +1,46 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fef8f0;
+  --foreground: #37192c;
+
+  --color-ciruela: #37192c;
+  --color-turquesa: #56dfcf;
+  --color-oat: #fef8f0;
+  --color-soft-blue: #8ca7f4;
+  --color-pastel-purple: #d98cf4;
+  --color-yuzu: #dbf48c;
+  --color-teal-deep: #177a6f;
+  --color-wine: #b3324f;
+
+  --color-card-blue: #d6dcf1;
+  --color-card-purple: #f1d2f1;
+  --color-card-lime: #f2f7cd;
+  --color-card-turquoise: #c3efe4;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --font-sans: var(--font-manrope);
+  --font-display: var(--font-bricolage);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-ciruela: var(--color-ciruela);
+  --color-turquesa: var(--color-turquesa);
+  --color-oat: var(--color-oat);
+  --color-soft-blue: var(--color-soft-blue);
+  --color-pastel-purple: var(--color-pastel-purple);
+  --color-yuzu: var(--color-yuzu);
+  --color-teal-deep: var(--color-teal-deep);
+  --color-wine: var(--color-wine);
+  --color-card-blue: var(--color-card-blue);
+  --color-card-purple: var(--color-card-purple);
+  --color-card-lime: var(--color-card-lime);
+  --color-card-turquoise: var(--color-card-turquoise);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-manrope), Arial, Helvetica, sans-serif;
 }
