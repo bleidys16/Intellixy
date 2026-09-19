@@ -1,0 +1,17 @@
+# dependencies
+node_modules/
+
+# builds
+apps/api/dist/
+apps/web/.next/
+apps/web/out/
+
+# env
+.env
+.env.*
+!.env.example
+
+# misc
+.DS_Store
+*.tsbuildinfo
+npm-debug.log*
