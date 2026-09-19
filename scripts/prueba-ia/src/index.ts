@@ -86,5 +86,11 @@ function buildReviewMarkdown(results: ReviewedQuestion[]): string {
 
 main().catch((err) => {
   console.error("Error:", err instanceof Error ? err.message : err);
+  if (err instanceof Error && err.cause) {
+    console.error("Cause:", err.cause);
+  }
+  if (err instanceof Error && err.stack) {
+    console.error(err.stack);
+  }
   process.exit(1);
 });
