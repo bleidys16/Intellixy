@@ -1,8 +1,9 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { generateQuestions } from "../ai/generateQuestions.js";
 import type { GeneratedQuestion, MaterialBlock } from "../ai/types.js";
 import { db } from "../db/client.js";
-import { materialChunks, questions, topics } from "../db/schema.js";
+import { materialChunks, questions } from "../db/schema.js";
+import { upsertTopics } from "./topics.js";
 
 /**
  * Tope de texto que se envía al modelo (~15.000 tokens). El RAG con embeddings queda fuera
@@ -10,14 +11,14 @@ import { materialChunks, questions, topics } from "../db/schema.js";
  */
 const MAX_INPUT_CHARS = 60_000;
 
-type Chunk = typeof materialChunks.$inferSelect;
+export type Chunk = typeof materialChunks.$inferSelect;
 
 /**
  * Para comparar citas se ignoran mayúsculas, tildes y puntuación: el modelo suele "corregir"
  * las tildes al citar (o el PDF las perdió al generarse) y pdfjs separa la puntuación con
  * espacios ("ATP ."). Lo que sí se exige es que las mismas palabras aparezcan en el mismo orden.
  */
-function normalize(text: string): string {
+export function normalize(text: string): string {
   return text
     .normalize("NFD")
     .replace(/\p{M}/gu, "")
@@ -30,7 +31,7 @@ function normalize(text: string): string {
  * Si el material cabe en el presupuesto se envía completo; si no, se toma una página cada
  * `step` (repartidas por todo el material, no solo el principio) y cada página se recorta.
  */
-function selectChunks(chunks: Chunk[]): Chunk[] {
+export function selectChunks(chunks: Chunk[]): Chunk[] {
   const total = chunks.reduce((sum, c) => sum + c.text.length, 0);
   if (total <= MAX_INPUT_CHARS) return chunks;
 
@@ -118,15 +119,8 @@ export async function generateForMaterial(input: {
   // Escritura en lote: una consulta para los temas y otra para las preguntas (antes eran ~3 por pregunta).
   const saved: GenerationResult["questions"] = [];
   if (valid.length > 0) {
-    const topicNames = [...new Set(valid.map((v) => v.topicName))];
-    await db
-      .insert(topics)
-      .values(topicNames.map((name) => ({ subjectId: input.subjectId, name })))
-      .onConflictDoNothing({ target: [topics.subjectId, topics.name] });
-    const topicRows = await db.query.topics.findMany({
-      where: and(eq(topics.subjectId, input.subjectId), inArray(topics.name, topicNames)),
-    });
-    const topicByName = new Map(topicRows.map((t) => [t.name, t]));
+    const topicByName = await upsertTopics(input.subjectId, valid.map((v) => v.topicName));
+    const topicRows = [...topicByName.values()];
 
     const rows = valid.filter((v) => topicByName.has(v.topicName));
     const inserted = await db

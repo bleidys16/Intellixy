@@ -3,9 +3,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../auth/middleware.js";
 import { db } from "../db/client.js";
-import { generationJobs, materials, questions, subjects, users } from "../db/schema.js";
-import { getLimits, limitReached } from "../limits.js";
-import { countUsageLastDay, recordUsage, refundUsage } from "../usage.js";
+import { generationJobs, questions, subjects } from "../db/schema.js";
+import { ACTIVE_STATUSES, enqueueGeneration } from "../generation/enqueue.js";
 import { safe } from "./safe.js";
 
 export const subjectsRouter = Router();
@@ -20,8 +19,6 @@ subjectsRouter.param("id", (_req, res, next, id: string) => {
   next();
 });
 
-const DEFAULT_QUESTION_COUNT = 5;
-const ACTIVE_STATUSES = ["pendiente", "procesando"];
 /** Cuánto tiempo sigue apareciendo un trabajo terminado, para que un cliente lento aún vea el resultado. */
 const RECENT_JOB_WINDOW_MS = 10 * 60 * 1000;
 
@@ -106,79 +103,19 @@ subjectsRouter.post<{ id: string }>(
       res.status(404).json({ error: "Materia no encontrada" });
       return;
     }
-
     const parsed = generateSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten() });
       return;
     }
-    const count = parsed.data.count ?? DEFAULT_QUESTION_COUNT;
-
-    const material = await db.query.materials.findFirst({
-      where: and(eq(materials.id, parsed.data.materialId), eq(materials.subjectId, subject.id)),
+    const result = await enqueueGeneration({
+      userId: req.userId!,
+      subjectId: subject.id,
+      materialId: parsed.data.materialId,
+      kind: "preguntas",
+      count: parsed.data.count,
     });
-    if (!material) {
-      res.status(404).json({ error: "Material no encontrado" });
-      return;
-    }
-    if (material.status !== "listo") {
-      res.status(409).json({ error: "El material todavía no está listo para generar preguntas" });
-      return;
-    }
-
-    const user = await db.query.users.findFirst({ where: eq(users.id, req.userId!) });
-    const limits = getLimits(user?.plan ?? "free");
-    if (count > limits.maxQuestionsPerGeneration) {
-      limitReached(
-        res,
-        "maxQuestionsPerGeneration",
-        `Tu plan permite hasta ${limits.maxQuestionsPerGeneration} preguntas por generación`,
-        limits.maxQuestionsPerGeneration,
-      );
-      return;
-    }
-    const usedToday = await countUsageLastDay(req.userId!, "ai_generation");
-    if (usedToday >= limits.aiGenerationsPerDay) {
-      limitReached(
-        res,
-        "aiGenerationsPerDay",
-        `Ya usaste tus ${limits.aiGenerationsPerDay} generaciones de hoy`,
-        limits.aiGenerationsPerDay,
-      );
-      return;
-    }
-
-    // Un solo trabajo activo por material: evita el doble clic y cuota gastada dos veces.
-    const active = await db.query.generationJobs.findFirst({
-      where: and(
-        eq(generationJobs.materialId, material.id),
-        inArray(generationJobs.status, ACTIVE_STATUSES),
-      ),
-    });
-    if (active) {
-      res.status(409).json({ error: "Ya se están generando preguntas de este material", job: active });
-      return;
-    }
-
-    // La cuota se reserva al encolar para que solicitudes simultáneas no se cuelen;
-    // si el trabajo falla, el worker la devuelve.
-    const usageEventId = await recordUsage(req.userId!, "ai_generation");
-    try {
-      const [job] = await db
-        .insert(generationJobs)
-        .values({
-          subjectId: subject.id,
-          materialId: material.id,
-          userId: req.userId!,
-          count,
-          usageEventId,
-        })
-        .returning();
-      res.status(202).json({ job });
-    } catch (err) {
-      await refundUsage(usageEventId).catch(() => {});
-      throw err;
-    }
+    res.status(result.status).json(result.body);
   }),
 );
 

@@ -1,6 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { generationJobs, materials } from "../db/schema.js";
+import { generateFlashcardsForMaterial } from "../flashcards/generateForMaterial.js";
 import { generateForMaterial } from "../questions/generateForMaterial.js";
 import { refundUsage } from "../usage.js";
 
@@ -11,7 +12,7 @@ const CONCURRENCY = Number(process.env.GENERATION_CONCURRENCY ?? 2);
 type Job = typeof generationJobs.$inferSelect;
 
 /**
- * Worker de generación de preguntas. La cola es la tabla `generation_jobs`: los "pendiente"
+ * Worker de generación (preguntas y tarjetas). La cola es la tabla `generation_jobs`: los "pendiente"
  * esperan turno y cada trabajo se reclama con FOR UPDATE SKIP LOCKED, igual que en el worker
  * de materiales. Corren varios ciclos en paralelo (CONCURRENCY) porque el tiempo se va en esperar al modelo.
  */
@@ -99,32 +100,39 @@ async function processJob(job: Job) {
   try {
     const material = await db.query.materials.findFirst({ where: eq(materials.id, job.materialId) });
     if (!material || material.status !== "listo") {
-      await fail(job, "El material ya no está disponible para generar preguntas");
+      await fail(job, "El material ya no está disponible para generar contenido");
       return;
     }
 
-    const result = await generateForMaterial({
-      subjectId: job.subjectId,
-      material: { id: material.id, name: material.name, type: material.type },
-      count: job.count,
-    });
+    const target = { id: material.id, name: material.name, type: material.type };
+    const outcome =
+      job.kind === "tarjetas"
+        ? await generateFlashcardsForMaterial({ subjectId: job.subjectId, material: target, count: job.count }).then(
+            (r) => ({ saved: r.created, discarded: r.discarded, sampled: r.sampled }),
+          )
+        : await generateForMaterial({ subjectId: job.subjectId, material: target, count: job.count }).then((r) => ({
+            saved: r.questions.length,
+            discarded: r.discarded,
+            sampled: r.sampled,
+          }));
 
-    if (result.questions.length === 0) {
-      await fail(job, "El modelo no produjo ninguna pregunta válida con cita verificable. Inténtalo de nuevo");
+    if (outcome.saved === 0) {
+      const what = job.kind === "tarjetas" ? "ninguna tarjeta válida" : "ninguna pregunta válida";
+      await fail(job, `El modelo no produjo ${what} con cita verificable. Inténtalo de nuevo`);
       return;
     }
     await db
       .update(generationJobs)
       .set({
         status: "listo",
-        questionCount: result.questions.length,
-        discarded: result.discarded,
-        sampled: result.sampled,
+        questionCount: outcome.saved,
+        discarded: outcome.discarded,
+        sampled: outcome.sampled,
         updatedAt: new Date(),
       })
       .where(eq(generationJobs.id, job.id));
   } catch (err) {
     console.error(`[generación] falló el trabajo ${job.id}:`, err);
-    await fail(job, "No se pudieron generar preguntas con el modelo de IA. Inténtalo de nuevo");
+    await fail(job, `No se pudieron generar ${job.kind === "tarjetas" ? "tarjetas" : "preguntas"} con el modelo de IA. Inténtalo de nuevo`);
   }
 }

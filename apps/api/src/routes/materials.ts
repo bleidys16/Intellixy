@@ -6,7 +6,15 @@ import multer from "multer";
 import { z } from "zod";
 import { requireAuth } from "../auth/middleware.js";
 import { db } from "../db/client.js";
-import { generationJobs, materialChunks, materials, questions, subjects, users } from "../db/schema.js";
+import {
+  flashcards,
+  generationJobs,
+  materialChunks,
+  materials,
+  questions,
+  subjects,
+  users,
+} from "../db/schema.js";
 import { detectFileType } from "../files/detectType.js";
 import { getLimits, limitReached } from "../limits.js";
 import { storage } from "../storage/index.js";
@@ -315,7 +323,16 @@ materialsRouter.delete<MaterialParams>(
       return;
     }
 
-    const questionsDeleted = await db.transaction(async (tx) => {
+    const { questionsDeleted, flashcardsDeleted } = await db.transaction(async (tx) => {
+      const chunkIds = tx
+        .select({ id: materialChunks.id })
+        .from(materialChunks)
+        .where(eq(materialChunks.materialId, material.id));
+      // Las tarjetas se borran solas con el material (cascade), pero se cuentan para avisar al cliente.
+      const cards = await tx
+        .select({ id: flashcards.id })
+        .from(flashcards)
+        .where(inArray(flashcards.chunkId, chunkIds));
       const removed = await tx
         .delete(questions)
         .where(
@@ -329,7 +346,7 @@ materialsRouter.delete<MaterialParams>(
         )
         .returning({ id: questions.id });
       await tx.delete(materials).where(eq(materials.id, material.id));
-      return removed.length;
+      return { questionsDeleted: removed.length, flashcardsDeleted: cards.length };
     });
 
     // Después de la base de datos: si esto falla queda un archivo huérfano, no un material roto.
@@ -339,6 +356,6 @@ materialsRouter.delete<MaterialParams>(
       });
     }
 
-    res.json({ deleted: true, questionsDeleted });
+    res.json({ deleted: true, questionsDeleted, flashcardsDeleted });
   }),
 );

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Logo } from "@/components/Logo";
+import { PasswordInput } from "@/components/PasswordInput";
 import { apiFetch, ApiError } from "@/lib/api";
 
 export default function LoginPage() {
@@ -49,16 +50,7 @@ export default function LoginPage() {
           />
         </label>
 
-        <label className="mt-4 block text-sm font-medium">
-          Contraseña
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-ciruela/15 px-3 py-2 outline-none focus:border-turquesa"
-          />
-        </label>
+        <PasswordInput label="Contraseña" value={password} onChange={setPassword} autoComplete="current-password" />
 
         {error && <p className="mt-4 text-sm text-wine">{error}</p>}
 

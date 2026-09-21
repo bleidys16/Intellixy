@@ -1,4 +1,4 @@
-import { getNvidiaApiKey, nvidiaChat } from "./nvidia.js";
+import { chatJson } from "./chatJson.js";
 import type { GeneratedQuestion, MaterialBlock } from "./types.js";
 
 const SYSTEM_PROMPT = `Sos un generador de preguntas de examen para estudiantes universitarios.
@@ -38,49 +38,14 @@ export async function generateQuestions(
   blocks: MaterialBlock[],
   questionCount: number,
 ): Promise<GeneratedQuestion[]> {
-  getNvidiaApiKey();
-  const model = process.env.NVIDIA_MODEL ?? "meta/llama-3.2-11b-vision-instruct";
-
-  const body = {
-    model,
-    temperature: 0.2,
-    max_tokens: 4096,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: buildUserPrompt(blocks, questionCount) },
-    ],
-  };
-
-  const attempts = 2;
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    try {
-      const data = await nvidiaChat(body);
-      const raw = data?.choices?.[0]?.message?.content ?? "";
-      return parseQuestions(raw);
-    } catch (err) {
-      lastError = err;
-    }
-  }
-  throw lastError;
-}
-
-function parseQuestions(raw: string): GeneratedQuestion[] {
-  const cleaned = raw
-    .trim()
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/```\s*$/i, "");
-
-  const start = cleaned.indexOf("{");
-  const end = cleaned.lastIndexOf("}");
-  if (start === -1 || end === -1) {
-    throw new Error(`No se encontró un JSON en la respuesta del modelo:\n${raw}`);
-  }
-
-  const parsed = JSON.parse(cleaned.slice(start, end + 1)) as { questions: GeneratedQuestion[] };
-  if (!Array.isArray(parsed.questions)) {
-    throw new Error("El JSON no tiene un array 'questions'");
-  }
-  return parsed.questions;
+  return chatJson({
+    system: SYSTEM_PROMPT,
+    user: buildUserPrompt(blocks, questionCount),
+    maxTokens: 4096,
+    validate: (parsed) => {
+      const questions = (parsed as { questions?: unknown }).questions;
+      if (!Array.isArray(questions)) throw new Error("El JSON no tiene un array 'questions'");
+      return questions as GeneratedQuestion[];
+    },
+  });
 }

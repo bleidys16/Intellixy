@@ -139,11 +139,16 @@ export const generationJobs = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     status: text("status").notNull().default("pendiente"),
-    /** Preguntas pedidas. */
+    /** Qué se genera: "preguntas" | "tarjetas". */
+    kind: text("kind").notNull().default("preguntas"),
+    /** Elementos pedidos (preguntas o tarjetas, según `kind`). */
     count: integer("count").notNull(),
     /** Evento de cuota reservado al encolar; se reembolsa si el trabajo falla. Sin FK: el reembolso lo borra. */
     usageEventId: uuid("usage_event_id"),
-    /** Resultado: preguntas guardadas, descartadas por cita no verificable, y si el material se muestreó. */
+    /**
+     * Resultado: elementos guardados (preguntas o tarjetas, según `kind`; el nombre viene de cuando solo
+     * había preguntas), descartados por cita no verificable, y si el material se muestreó.
+     */
     questionCount: integer("question_count").notNull().default(0),
     discarded: integer("discarded").notNull().default(0),
     sampled: boolean("sampled").notNull().default(false),
@@ -213,6 +218,143 @@ export const attemptAnswers = pgTable(
     questionIdx: index("attempt_answers_question_idx").on(table.questionId),
   }),
 );
+
+/**
+ * Tarjeta de estudio generada del material; apunta a su fuente (fragmento + cita).
+ * `box` y `dueAt` son el estado Leitner actual (caja 1-5 y cuándo toca repasarla): se guardan aquí
+ * para consultar "pendientes" sin recorrer el historial, que vive en `flashcard_reviews`.
+ * Al borrar el material se borran también sus tarjetas (cascade por el fragmento).
+ */
+export const flashcards = pgTable(
+  "flashcards",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => subjects.id, { onDelete: "cascade" }),
+    topicId: uuid("topic_id")
+      .notNull()
+      .references(() => topics.id),
+    chunkId: uuid("chunk_id")
+      .notNull()
+      .references(() => materialChunks.id, { onDelete: "cascade" }),
+    front: text("front").notNull(),
+    back: text("back").notNull(),
+    sourceQuote: text("source_quote").notNull(),
+    box: integer("box").notNull().default(1),
+    dueAt: timestamp("due_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    subjectDueIdx: index("flashcards_subject_due_idx").on(table.subjectId, table.dueAt),
+  }),
+);
+
+/** Historial de repasos. result: "sabia" | "dude" | "no_sabia". */
+export const flashcardReviews = pgTable(
+  "flashcard_reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    flashcardId: uuid("flashcard_id")
+      .notNull()
+      .references(() => flashcards.id, { onDelete: "cascade" }),
+    result: text("result").notNull(),
+    /** Caja en la que quedó la tarjeta después de este repaso. */
+    boxAfter: integer("box_after").notNull(),
+    reviewedAt: timestamp("reviewed_at").notNull().defaultNow(),
+    nextDueAt: timestamp("next_due_at").notNull(),
+  },
+  (table) => ({
+    flashcardIdx: index("flashcard_reviews_flashcard_idx").on(table.flashcardId, table.reviewedAt),
+  }),
+);
+
+export const flashcardsRelations = relations(flashcards, ({ one, many }) => ({
+  subject: one(subjects, { fields: [flashcards.subjectId], references: [subjects.id] }),
+  topic: one(topics, { fields: [flashcards.topicId], references: [topics.id] }),
+  chunk: one(materialChunks, { fields: [flashcards.chunkId], references: [materialChunks.id] }),
+  reviews: many(flashcardReviews),
+}));
+
+export const flashcardReviewsRelations = relations(flashcardReviews, ({ one }) => ({
+  flashcard: one(flashcards, { fields: [flashcardReviews.flashcardId], references: [flashcards.id] }),
+}));
+
+/** Una conversación del tutor sobre una materia. El título sale de la primera pregunta. */
+export const tutorConversations = pgTable(
+  "tutor_conversations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => subjects.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    subjectUserIdx: index("tutor_conversations_subject_user_idx").on(table.subjectId, table.userId, table.updatedAt),
+  }),
+);
+
+/** Cita verificada de una respuesta del tutor: se guarda una copia, así sigue legible aunque se borre el material. */
+export interface TutorCitation {
+  /** Número que aparece como [n] en el texto de la respuesta. */
+  ref: number;
+  quote: string;
+  page: number;
+  materialId: string;
+  materialName: string;
+  materialType: string;
+}
+
+/**
+ * Mensajes de la conversación. Las preguntas del estudiante (role "user") nacen "listo". Las respuestas
+ * (role "assistant") nacen "pendiente" y un worker las completa; son la cola del tutor, igual que
+ * `generation_jobs` para las generaciones.
+ *
+ * outcome (solo respuestas "listo"): "grounded" = respaldada por citas verificadas; "not_in_material" = el tema
+ * no aparece en los apuntes; "unverified" = el modelo dijo que sí estaba pero ninguna cita se pudo comprobar.
+ * `general` es conocimiento general del modelo, sin fuente verificable, y siempre se muestra aparte y marcado.
+ */
+export const tutorMessages = pgTable(
+  "tutor_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => tutorConversations.id, { onDelete: "cascade" }),
+    role: text("role").notNull(),
+    content: text("content").notNull().default(""),
+    status: text("status").notNull().default("listo"),
+    outcome: text("outcome"),
+    general: text("general"),
+    citations: jsonb("citations").notNull().$type<TutorCitation[]>().default([]),
+    errorMessage: text("error_message"),
+    /** Evento de cuota reservado al preguntar; se reembolsa si la respuesta falla. Sin FK: el reembolso lo borra. */
+    usageEventId: uuid("usage_event_id"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    conversationIdx: index("tutor_messages_conversation_idx").on(table.conversationId, table.createdAt),
+    statusIdx: index("tutor_messages_status_idx").on(table.status, table.createdAt),
+  }),
+);
+
+export const tutorConversationsRelations = relations(tutorConversations, ({ many }) => ({
+  messages: many(tutorMessages),
+}));
+
+export const tutorMessagesRelations = relations(tutorMessages, ({ one }) => ({
+  conversation: one(tutorConversations, {
+    fields: [tutorMessages.conversationId],
+    references: [tutorConversations.id],
+  }),
+}));
 
 export const quizAttemptsRelations = relations(quizAttempts, ({ many }) => ({
   answers: many(attemptAnswers),

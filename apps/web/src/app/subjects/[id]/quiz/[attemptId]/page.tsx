@@ -48,8 +48,12 @@ export default function QuizPage() {
 
   useEffect(() => {
     if (!user) return;
+    // Ignora la respuesta de una carga anterior (React ejecuta el efecto dos veces en desarrollo): si llegara
+    // tarde, volvería a la primera pregunta sin responder en plena partida.
+    let cancelled = false;
     apiFetch<{ attempt: QuizAttempt; items: QuizItem[] }>(`/subjects/${id}/quizzes/${attemptId}`)
       .then((data) => {
+        if (cancelled) return;
         setAttempt(data.attempt);
         setItems(data.items);
         // Se retoma en la primera pregunta sin responder; si no queda ninguna, se muestran los resultados.
@@ -57,7 +61,12 @@ export default function QuizPage() {
         if (first === -1) setShowResults(true);
         else setIndex(first);
       })
-      .catch(() => router.push(`/subjects/${id}`));
+      .catch(() => {
+        if (!cancelled) router.push(`/subjects/${id}`);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [user, id, attemptId, router]);
 
   // El tiempo por pregunta se mide desde que aparece en pantalla.

@@ -2,7 +2,7 @@ import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "./db/client.js";
 import { materials, subjects, usageEvents } from "./db/schema.js";
 
-export type UsageKind = "ai_generation" | "ai_ocr" | "upload";
+export type UsageKind = "ai_generation" | "ai_ocr" | "ai_tutor" | "upload";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

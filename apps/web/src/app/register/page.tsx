@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Logo } from "@/components/Logo";
+import { PasswordInput } from "@/components/PasswordInput";
 import { apiFetch, ApiError } from "@/lib/api";
 
 export default function RegisterPage() {
@@ -63,18 +64,14 @@ export default function RegisterPage() {
           />
         </label>
 
-        <label className="mt-4 block text-sm font-medium">
-          Contraseña
-          <input
-            type="password"
-            required
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-ciruela/15 px-3 py-2 outline-none focus:border-turquesa"
-          />
-          <span className="mt-1 block text-xs text-ciruela/50">Mínimo 8 caracteres</span>
-        </label>
+        <PasswordInput
+          label="Contraseña"
+          value={password}
+          onChange={setPassword}
+          autoComplete="new-password"
+          minLength={8}
+        />
+        <p className="mt-1 text-xs text-ciruela/50">Mínimo 8 caracteres</p>
 
         {error && <p className="mt-4 text-sm text-wine">{error}</p>}
 

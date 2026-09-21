@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
-import type { GenerationJob, Material, MaterialChunk, MaterialStatus } from "@/lib/types";
+import type { GenerationJob, GenerationKind, Material, MaterialChunk, MaterialStatus } from "@/lib/types";
 
 interface Props {
   material: Material;
   subjectId: string;
   /** Generación de preguntas en curso (en cola o procesando) para ESTE material, si la hay. */
   generation: GenerationJob | null;
-  onGenerate: (material: Material) => void;
+  onGenerate: (material: Material, kind: GenerationKind) => void;
   onRetry: (material: Material) => Promise<void>;
   onDelete: (material: Material) => Promise<void>;
 }
@@ -169,7 +169,9 @@ export function MaterialCard({
                 className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-ciruela/30 border-t-ciruela"
               />
               <span>
-                {generation.status === "pendiente" ? "Tus preguntas están en cola." : "Generando preguntas."}{" "}
+                {generation.status === "pendiente"
+                  ? `Tus ${generation.kind} están en cola.`
+                  : `Generando ${generation.kind}.`}{" "}
                 Puedes seguir usando la app; esto se actualiza solo.
               </span>
             </p>
@@ -180,8 +182,8 @@ export function MaterialCard({
       {confirmingDelete ? (
         <div role="alertdialog" className="mt-3 rounded-xl bg-wine/5 p-3 text-sm">
           <p>
-            ¿Borrar <strong>{material.name}</strong>? También se borrarán las preguntas generadas a
-            partir de este material.
+            ¿Borrar <strong>{material.name}</strong>? También se borrarán las preguntas y tarjetas
+            generadas a partir de este material.
           </p>
           <div className="mt-2 flex gap-2">
             <button
@@ -205,15 +207,26 @@ export function MaterialCard({
           {material.status === "listo" && (
             <>
               <button
-                onClick={() => onGenerate(material)}
+                onClick={() => onGenerate(material, "preguntas")}
                 disabled={generating}
                 className="rounded-full bg-turquesa px-3.5 py-1.5 text-sm font-medium text-ciruela transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {generation
+                {generation?.kind === "preguntas"
                   ? generation.status === "pendiente"
                     ? "En cola..."
                     : "Generando..."
                   : "Generar preguntas"}
+              </button>
+              <button
+                onClick={() => onGenerate(material, "tarjetas")}
+                disabled={generating}
+                className="rounded-full bg-card-blue px-3.5 py-1.5 text-sm font-medium text-ciruela transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {generation?.kind === "tarjetas"
+                  ? generation.status === "pendiente"
+                    ? "En cola..."
+                    : "Generando..."
+                  : "Generar tarjetas"}
               </button>
               <button onClick={() => void toggleText()} className={secondaryButton}>
                 {open ? "Ocultar texto" : "Ver texto extraído"}

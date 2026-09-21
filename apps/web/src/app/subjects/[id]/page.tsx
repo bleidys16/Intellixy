@@ -5,13 +5,14 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MaterialCard } from "@/components/MaterialCard";
 import { MaterialUploader } from "@/components/MaterialUploader";
+import { FlashcardsPanel } from "@/components/FlashcardsPanel";
 import { QuestionGroups } from "@/components/QuestionGroups";
 import { QuizHistory } from "@/components/QuizHistory";
 import { QuizLauncher } from "@/components/QuizLauncher";
 import { TopNav } from "@/components/TopNav";
 import { apiFetch, ApiError } from "@/lib/api";
 import { useSession } from "@/lib/useSession";
-import type { GenerationJob, Material, Question, Subject } from "@/lib/types";
+import type { GenerationJob, GenerationKind, Material, Question, Subject } from "@/lib/types";
 
 const POLL_INTERVAL_MS = 2500;
 
@@ -24,6 +25,8 @@ export default function SubjectPage() {
   const [materials, setMaterials] = useState<Material[] | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [jobs, setJobs] = useState<GenerationJob[]>([]);
+  // Sube cuando termina una generación de tarjetas, para que el panel de tarjetas vuelva a pedir sus totales.
+  const [cardsRefresh, setCardsRefresh] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,22 +57,27 @@ export default function SubjectPage() {
 
         if (job.status === "error") {
           setNotice(null);
-          setError(job.errorMessage ?? "No se pudieron generar las preguntas");
+          setError(job.errorMessage ?? `No se pudieron generar las ${job.kind}`);
           continue;
         }
         const name = materialsRef.current?.find((m) => m.id === job.materialId)?.name ?? "tu material";
-        const parts = [
-          `Se generaron ${job.questionCount} ${job.questionCount === 1 ? "pregunta" : "preguntas"} de «${name}».`,
-        ];
+        const one = job.questionCount === 1;
+        const noun = job.kind === "tarjetas" ? (one ? "tarjeta" : "tarjetas") : one ? "pregunta" : "preguntas";
+        const parts = [`Se generaron ${job.questionCount} ${noun} de «${name}».`];
         if (job.sampled) {
           parts.push("El material es largo, así que se usaron páginas repartidas de todo el documento.");
         }
         if (job.discarded > 0) {
-          parts.push(`${job.discarded} se descartaron porque su cita no se pudo verificar en el material.`);
+          parts.push(
+            job.kind === "tarjetas"
+              ? `${job.discarded} se descartaron: su cita no se pudo verificar o ya tenías una tarjeta igual.`
+              : `${job.discarded} se descartaron porque su cita no se pudo verificar en el material.`,
+          );
         }
         setError(null);
         setNotice(parts.join(" "));
-        void refreshQuestions().catch(() => {});
+        if (job.kind === "tarjetas") setCardsRefresh((n) => n + 1);
+        else void refreshQuestions().catch(() => {});
       }
     },
     [refreshQuestions],
@@ -120,17 +128,18 @@ export default function SubjectPage() {
     setMaterials((prev) => [material, ...(prev ?? [])]);
   }
 
-  async function handleGenerate(material: Material) {
+  async function handleGenerate(material: Material, kind: GenerationKind) {
     setError(null);
     setNotice(null);
+    const endpoint = kind === "tarjetas" ? "flashcards" : "questions";
     try {
-      const { job } = await apiFetch<{ job: GenerationJob }>(`/subjects/${id}/questions/generate`, {
+      const { job } = await apiFetch<{ job: GenerationJob }>(`/subjects/${id}/${endpoint}/generate`, {
         method: "POST",
         body: JSON.stringify({ materialId: material.id }),
       });
       setJobs((prev) => [job, ...prev.filter((j) => j.id !== job.id)]);
       setNotice(
-        `Estamos generando las preguntas de «${material.name}». Puedes seguir usando la app; te avisamos cuando estén listas.`,
+        `Estamos generando las ${kind} de «${material.name}». Puedes seguir usando la app; te avisamos cuando estén listas.`,
       );
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
@@ -138,7 +147,7 @@ export default function SubjectPage() {
         const data = await apiFetch<{ jobs: GenerationJob[] }>(`/subjects/${id}/generations`).catch(() => null);
         if (data) syncJobs(data.jobs, false);
       }
-      setError(err instanceof ApiError ? err.message : "No se pudieron generar las preguntas");
+      setError(err instanceof ApiError ? err.message : `No se pudieron generar las ${kind}`);
     }
   }
 
@@ -220,6 +229,25 @@ export default function SubjectPage() {
               <QuizLauncher subjectId={id} questions={questions} />
             </div>
             <QuizHistory subjectId={id} />
+          </section>
+        )}
+
+        <FlashcardsPanel subjectId={id} refreshKey={cardsRefresh} />
+
+        {materials?.some((m) => m.status === "listo") && (
+          <section id="tutor" className="scroll-mt-4">
+            <h2 className="mt-10 font-display text-xl font-semibold">Tutor</h2>
+            <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm sm:p-5">
+              <p className="text-sm text-ciruela/70">
+                Pregúntale lo que no entiendas. Responde con tus apuntes y te muestra de dónde sacó cada dato.
+              </p>
+              <Link
+                href={`/subjects/${id}/tutor`}
+                className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-full bg-turquesa px-5 text-sm font-semibold text-ciruela transition-opacity hover:opacity-90 sm:w-auto"
+              >
+                Preguntarle al tutor
+              </Link>
+            </div>
           </section>
         )}
 
