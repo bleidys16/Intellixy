@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { Router } from "express";
 import type { Request, Response } from "express";
 import multer from "multer";
@@ -28,10 +28,32 @@ const pasteTextSchema = z.object({
   text: z.string().min(50, "El texto es muy corto para generar preguntas útiles"),
 });
 
+const uuidSchema = z.string().uuid();
+
+/** Un id que no es UUID nunca existe; sin esta guarda Postgres lanza error de sintaxis. */
 async function getOwnedSubject(subjectId: string, userId: string) {
+  if (!uuidSchema.safeParse(subjectId).success) return undefined;
   return db.query.subjects.findFirst({
     where: and(eq(subjects.id, subjectId), eq(subjects.userId, userId)),
   });
+}
+
+type Material = typeof materials.$inferSelect;
+
+/** La ruta interna del archivo en el almacenamiento no se expone al cliente. */
+function publicMaterial(material: Material) {
+  const { storagePath: _storagePath, ...rest } = material;
+  return rest;
+}
+
+/** Los errores no capturados en handlers async tumban el proceso en Express 4. */
+function safe<P>(handler: (req: Request<P>, res: Response) => Promise<void>) {
+  return (req: Request<P>, res: Response) => {
+    handler(req, res).catch((err) => {
+      console.error("Error en ruta de materiales:", err);
+      if (!res.headersSent) res.status(500).json({ error: "Error interno del servidor" });
+    });
+  };
 }
 
 materialsRouter.post<{ subjectId: string }>("/text", async (req, res) => {
@@ -100,7 +122,7 @@ materialsRouter.post<{ subjectId: string }>("/text", async (req, res) => {
     savedQuestions.push({ ...saved, topic: { id: topicRow.id, name: topicRow.name } });
   }
 
-  res.status(201).json({ material, questions: savedQuestions });
+  res.status(201).json({ material: publicMaterial(material), questions: savedQuestions });
 });
 
 /** Ejecuta multer como promesa; el tope de tamaño sale del plan del usuario. */
@@ -226,10 +248,145 @@ materialsRouter.post<{ subjectId: string }>("/upload", async (req, res) => {
     await recordUsage(req.userId!, "upload");
     if (detected.type === "image") await recordUsage(req.userId!, "ai_ocr");
 
-    res.status(202).json({ material });
+    res.status(202).json({ material: publicMaterial(material) });
   } catch (err) {
     console.error("Error al subir material:", err);
     if (storedKey) await storage.remove(storedKey).catch(() => {});
     res.status(500).json({ error: "Error al subir el archivo" });
   }
 });
+
+materialsRouter.get<{ subjectId: string }>(
+  "/",
+  safe(async (req, res) => {
+    const subject = await getOwnedSubject(req.params.subjectId, req.userId!);
+    if (!subject) {
+      res.status(404).json({ error: "Materia no encontrada" });
+      return;
+    }
+    const rows = await db.query.materials.findMany({
+      where: eq(materials.subjectId, subject.id),
+      orderBy: (m, { desc }) => [desc(m.createdAt)],
+    });
+    res.json({ materials: rows.map(publicMaterial) });
+  }),
+);
+
+type MaterialParams = { subjectId: string; materialId: string };
+
+async function getOwnedMaterial(params: MaterialParams, userId: string) {
+  if (!uuidSchema.safeParse(params.materialId).success) return null;
+  const subject = await getOwnedSubject(params.subjectId, userId);
+  if (!subject) return null;
+  return (
+    (await db.query.materials.findFirst({
+      where: and(eq(materials.id, params.materialId), eq(materials.subjectId, subject.id)),
+    })) ?? null
+  );
+}
+
+/** Un material con sus fragmentos por página: lo que lo hace "consultable". */
+materialsRouter.get<MaterialParams>(
+  "/:materialId",
+  safe(async (req, res) => {
+    const material = await getOwnedMaterial(req.params, req.userId!);
+    if (!material) {
+      res.status(404).json({ error: "Material no encontrado" });
+      return;
+    }
+    const chunks = await db.query.materialChunks.findMany({
+      where: eq(materialChunks.materialId, material.id),
+      orderBy: (c, { asc }) => [asc(c.page)],
+      columns: { id: true, page: true, text: true },
+    });
+    res.json({ material: publicMaterial(material), chunks });
+  }),
+);
+
+/**
+ * Devuelve a la cola un material que falló. Una imagen vuelve a gastar OCR con IA,
+ * así que cuenta contra la cuota diaria igual que al subirla; un PDF no cuesta nada.
+ */
+materialsRouter.post<MaterialParams>(
+  "/:materialId/retry",
+  safe(async (req, res) => {
+    const material = await getOwnedMaterial(req.params, req.userId!);
+    if (!material) {
+      res.status(404).json({ error: "Material no encontrado" });
+      return;
+    }
+    if (material.status !== "error" || !material.storagePath) {
+      res.status(409).json({ error: "Solo se pueden reintentar los materiales que fallaron" });
+      return;
+    }
+
+    if (material.type === "image") {
+      const user = await db.query.users.findFirst({ where: eq(users.id, req.userId!) });
+      const limits = getLimits(user?.plan ?? "free");
+      const ocrToday = await countUsageLastDay(req.userId!, "ai_ocr");
+      if (ocrToday >= limits.ocrImagesPerDay) {
+        limitReached(
+          res,
+          "ocrImagesPerDay",
+          `Ya usaste tus ${limits.ocrImagesPerDay} imágenes con OCR de hoy`,
+          limits.ocrImagesPerDay,
+        );
+        return;
+      }
+      await recordUsage(req.userId!, "ai_ocr");
+    }
+
+    const [updated] = await db
+      .update(materials)
+      .set({ status: "pendiente", errorMessage: null, updatedAt: new Date() })
+      .where(eq(materials.id, material.id))
+      .returning();
+    res.status(202).json({ material: publicMaterial(updated) });
+  }),
+);
+
+/**
+ * Borra el material, su archivo y sus fragmentos. Las preguntas generadas a partir de
+ * esos fragmentos también se borran: sin su fuente ya no hay de dónde citarlas.
+ * Borrar libera espacio del plan, pero no devuelve las cuotas diarias ya gastadas.
+ */
+materialsRouter.delete<MaterialParams>(
+  "/:materialId",
+  safe(async (req, res) => {
+    const material = await getOwnedMaterial(req.params, req.userId!);
+    if (!material) {
+      res.status(404).json({ error: "Material no encontrado" });
+      return;
+    }
+    if (material.status === "procesando") {
+      res.status(409).json({ error: "El material se está procesando; espera a que termine" });
+      return;
+    }
+
+    const questionsDeleted = await db.transaction(async (tx) => {
+      const removed = await tx
+        .delete(questions)
+        .where(
+          inArray(
+            questions.chunkId,
+            tx
+              .select({ id: materialChunks.id })
+              .from(materialChunks)
+              .where(eq(materialChunks.materialId, material.id)),
+          ),
+        )
+        .returning({ id: questions.id });
+      await tx.delete(materials).where(eq(materials.id, material.id));
+      return removed.length;
+    });
+
+    // Después de la base de datos: si esto falla queda un archivo huérfano, no un material roto.
+    if (material.storagePath) {
+      await storage.remove(material.storagePath).catch((err) => {
+        console.error(`No se pudo borrar el archivo ${material.storagePath}:`, err);
+      });
+    }
+
+    res.json({ deleted: true, questionsDeleted });
+  }),
+);
