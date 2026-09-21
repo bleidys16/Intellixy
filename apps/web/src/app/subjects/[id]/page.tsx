@@ -38,9 +38,17 @@ export default function SubjectPage() {
     setError(null);
     setGenerating(true);
     try {
-      const data = await apiFetch<{ questions: Question[] }>(`/subjects/${id}/materials/text`, {
+      // Dos pasos: primero se crea el material, luego se piden las preguntas de ese material.
+      const created = await apiFetch<{ material: { id: string } }>(
+        `/subjects/${id}/materials/text`,
+        {
+          method: "POST",
+          body: JSON.stringify({ name: materialName || "Texto pegado", text }),
+        },
+      );
+      const data = await apiFetch<{ questions: Question[] }>(`/subjects/${id}/questions/generate`, {
         method: "POST",
-        body: JSON.stringify({ name: materialName || "Texto pegado", text }),
+        body: JSON.stringify({ materialId: created.material.id }),
       });
       setQuestions((prev) => [...data.questions, ...prev]);
       setMaterialName("");

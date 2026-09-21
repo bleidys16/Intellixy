@@ -6,8 +6,15 @@ export type UsageKind = "ai_generation" | "ai_ocr" | "upload";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export async function recordUsage(userId: string, kind: UsageKind): Promise<void> {
-  await db.insert(usageEvents).values({ userId, kind });
+/** Devuelve el id del evento por si hay que reembolsarlo con `refundUsage`. */
+export async function recordUsage(userId: string, kind: UsageKind): Promise<string> {
+  const [event] = await db.insert(usageEvents).values({ userId, kind }).returning({ id: usageEvents.id });
+  return event.id;
+}
+
+/** Anula un evento de uso (p. ej. si la IA falló y el usuario no debe perder la cuota). */
+export async function refundUsage(eventId: string): Promise<void> {
+  await db.delete(usageEvents).where(eq(usageEvents.id, eventId));
 }
 
 /** Cuenta los eventos de las últimas 24 h (ventana móvil, no día calendario). */

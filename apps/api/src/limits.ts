@@ -18,6 +18,8 @@ export interface PlanLimits {
   maxStorageBytes: number;
   /** Generaciones de preguntas por día (ventana móvil de 24 h). */
   aiGenerationsPerDay: number;
+  /** Preguntas máximas que se pueden pedir en una sola generación. */
+  maxQuestionsPerGeneration: number;
   /** Imágenes procesadas con OCR por día (ventana móvil de 24 h). */
   ocrImagesPerDay: number;
 }
@@ -31,6 +33,7 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
     maxMaterialsPerSubject: 10,
     maxStorageBytes: 100 * MB,
     aiGenerationsPerDay: 5,
+    maxQuestionsPerGeneration: 10,
     ocrImagesPerDay: 5,
   },
 };
