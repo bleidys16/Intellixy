@@ -1,3 +1,5 @@
+import type { Response } from "express";
+
 /**
  * Límites por plan. Único lugar donde viven estos números: las rutas nunca los
  * escriben a mano, así cambiar un límite o crear un plan nuevo es tocar solo este archivo.
@@ -35,4 +37,19 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
 
 export function getLimits(plan: string): PlanLimits {
   return PLAN_LIMITS[plan as Plan] ?? PLAN_LIMITS.free;
+}
+
+/**
+ * Respuesta uniforme cuando se supera un límite: `code` fijo y `limit` con el nombre
+ * del límite, para que el frontend pueda mostrar el mensaje o el aviso de mejorar plan.
+ * 413 para tamaño de archivo, 429 para cuotas diarias, 403 para el resto.
+ */
+export function limitReached(
+  res: Response,
+  limit: keyof PlanLimits,
+  message: string,
+  max: number,
+): void {
+  const status = limit === "maxFileBytes" ? 413 : limit.endsWith("PerDay") ? 429 : 403;
+  res.status(status).json({ error: message, code: "LIMIT_REACHED", limit, max });
 }
