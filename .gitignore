@@ -18,3 +18,6 @@ npm-debug.log*
 
 # archivos subidos (almacenamiento local)
 apps/api/uploads/
+
+# datos de idioma descargados por tesseract.js
+apps/api/.cache/
