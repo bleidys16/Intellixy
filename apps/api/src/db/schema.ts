@@ -1,11 +1,22 @@
 import { relations } from "drizzle-orm";
-import { integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  /** Plan de suscripción; define los límites en `limits.ts`. Hoy solo existe "free". */
+  plan: text("plan").notNull().default("free"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -20,7 +31,11 @@ export const subjects = pgTable("subjects", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-/** Fase 1 solo usa type = "text" (texto pegado). PDF/imagen se suman en Fase 2. */
+/**
+ * type: "text" | "pdf" | "image".
+ * status: "pendiente" → "procesando" → "listo" | "error". El texto pegado nace "listo".
+ * Los materiales "pendiente" son la cola de trabajos que consume el worker.
+ */
 export const materials = pgTable("materials", {
   id: uuid("id").primaryKey().defaultRandom(),
   subjectId: uuid("subject_id")
@@ -28,8 +43,15 @@ export const materials = pgTable("materials", {
     .references(() => subjects.id, { onDelete: "cascade" }),
   type: text("type").notNull(),
   name: text("name").notNull(),
-  status: text("status").notNull().default("listo"),
+  status: text("status").notNull().default("pendiente"),
+  /** Clave del archivo en el almacenamiento; null para texto pegado. */
+  storagePath: text("storage_path"),
+  mimeType: text("mime_type"),
+  sizeBytes: integer("size_bytes").notNull().default(0),
+  pageCount: integer("page_count"),
+  errorMessage: text("error_message"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 export const materialChunks = pgTable("material_chunks", {
@@ -74,8 +96,36 @@ export const questions = pgTable("questions", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+/**
+ * Registro de uso para cuotas por plan y control de costos.
+ * kind: "ai_generation" | "ai_ocr" | "upload".
+ */
+export const usageEvents = pgTable(
+  "usage_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    userKindDateIdx: index("usage_events_user_kind_date_idx").on(
+      table.userId,
+      table.kind,
+      table.createdAt,
+    ),
+  }),
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   subjects: many(subjects),
+  usageEvents: many(usageEvents),
+}));
+
+export const usageEventsRelations = relations(usageEvents, ({ one }) => ({
+  user: one(users, { fields: [usageEvents.userId], references: [users.id] }),
 }));
 
 export const subjectsRelations = relations(subjects, ({ one, many }) => ({
