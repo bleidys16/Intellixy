@@ -10,6 +10,7 @@ import { generationJobs, materialChunks, materials, questions, subjects, users }
 import { detectFileType } from "../files/detectType.js";
 import { getLimits, limitReached } from "../limits.js";
 import { storage } from "../storage/index.js";
+import { getOwnedSubject } from "./access.js";
 import { safe } from "./safe.js";
 import {
   countMaterialsInSubject,
@@ -27,14 +28,6 @@ const pasteTextSchema = z.object({
 });
 
 const uuidSchema = z.string().uuid();
-
-/** Un id que no es UUID nunca existe; sin esta guarda Postgres lanza error de sintaxis. */
-async function getOwnedSubject(subjectId: string, userId: string) {
-  if (!uuidSchema.safeParse(subjectId).success) return undefined;
-  return db.query.subjects.findFirst({
-    where: and(eq(subjects.id, subjectId), eq(subjects.userId, userId)),
-  });
-}
 
 type Material = typeof materials.$inferSelect;
 

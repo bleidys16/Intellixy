@@ -4,6 +4,7 @@ import cors from "cors";
 import express from "express";
 import { authRouter } from "./routes/auth.js";
 import { materialsRouter } from "./routes/materials.js";
+import { quizzesRouter } from "./routes/quizzes.js";
 import { subjectsRouter } from "./routes/subjects.js";
 import { startGenerationWorker } from "./worker/generationWorker.js";
 import { startMaterialWorker } from "./worker/materialWorker.js";
@@ -22,6 +23,7 @@ app.get("/health", (_req, res) => {
 app.use("/auth", authRouter);
 app.use("/subjects", subjectsRouter);
 app.use("/subjects/:subjectId/materials", materialsRouter);
+app.use("/subjects/:subjectId/quizzes", quizzesRouter);
 
 app.listen(port, () => {
   console.log(`API listening on http://localhost:${port}`);

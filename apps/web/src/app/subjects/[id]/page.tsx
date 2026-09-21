@@ -6,6 +6,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { MaterialCard } from "@/components/MaterialCard";
 import { MaterialUploader } from "@/components/MaterialUploader";
 import { QuestionGroups } from "@/components/QuestionGroups";
+import { QuizHistory } from "@/components/QuizHistory";
+import { QuizLauncher } from "@/components/QuizLauncher";
 import { TopNav } from "@/components/TopNav";
 import { apiFetch, ApiError } from "@/lib/api";
 import { useSession } from "@/lib/useSession";
@@ -209,6 +211,16 @@ export default function SubjectPage() {
           <p role="alert" className="mt-4 rounded-xl bg-wine/10 px-4 py-3 text-sm text-wine">
             {error}
           </p>
+        )}
+
+        {questions.length > 0 && (
+          <section id="practicar" className="scroll-mt-4">
+            <h2 className="mt-10 font-display text-xl font-semibold">Practicar</h2>
+            <div className="mt-3">
+              <QuizLauncher subjectId={id} questions={questions} />
+            </div>
+            <QuizHistory subjectId={id} />
+          </section>
         )}
 
         <h2 className="mt-10 font-display text-xl font-semibold">

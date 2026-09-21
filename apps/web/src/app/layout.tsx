@@ -20,7 +20,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="es" className={`${manrope.variable} ${bricolage.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col bg-oat text-ciruela">{children}</body>
+      {/* Algunas extensiones (p. ej. ColorZilla) añaden atributos al body antes de hidratar. */}
+      <body className="min-h-full flex flex-col bg-oat text-ciruela" suppressHydrationWarning>
+        {children}
+      </body>
     </html>
   );
 }

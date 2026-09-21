@@ -70,3 +70,56 @@ export interface GenerationJob {
   createdAt: string;
   updatedAt: string;
 }
+
+export type OptionLetter = "a" | "b" | "c" | "d";
+
+export interface QuizAttempt {
+  id: string;
+  subjectId: string;
+  status: "en_curso" | "terminado";
+  total: number;
+  /** Aciertos; null mientras el intento está en curso. */
+  score: number | null;
+  createdAt: string;
+  finishedAt: string | null;
+}
+
+/** Fila del historial: el intento y cuántas preguntas lleva respondidas. */
+export interface QuizSummary extends QuizAttempt {
+  answered: number;
+}
+
+export interface QuizSource {
+  quote: string;
+  page: number;
+  materialId: string;
+  materialName: string;
+}
+
+/** Lo que la API revela solo después de responder. */
+export interface QuizResult {
+  givenAnswer: OptionLetter | null;
+  isCorrect: boolean | null;
+  correctOption: OptionLetter;
+  explanation: string;
+  source: QuizSource;
+}
+
+export interface QuizItem {
+  position: number;
+  question: {
+    id: string;
+    prompt: string;
+    options: Record<OptionLetter, string>;
+    topic: { id: string; name: string };
+    material: { id: string; name: string; type: "text" | "pdf" | "image" };
+  };
+  answered: boolean;
+  result: QuizResult | null;
+}
+
+export interface QuizAnswerResponse {
+  result: QuizResult;
+  attempt: QuizAttempt;
+  remaining: number;
+}

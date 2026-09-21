@@ -157,6 +157,72 @@ export const generationJobs = pgTable(
   }),
 );
 
+/**
+ * Un intento de quiz sobre las preguntas ya generadas de una materia (no gasta IA).
+ * status: "en_curso" → "terminado". `score` queda en null hasta terminar.
+ */
+export const quizAttempts = pgTable(
+  "quiz_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => subjects.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("en_curso"),
+    /** Preguntas del intento (se fijan al crearlo). */
+    total: integer("total").notNull(),
+    /** Aciertos; null mientras el intento está en curso. */
+    score: integer("score"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    finishedAt: timestamp("finished_at"),
+  },
+  (table) => ({
+    subjectUserIdx: index("quiz_attempts_subject_user_idx").on(table.subjectId, table.userId, table.createdAt),
+  }),
+);
+
+/**
+ * Una fila por pregunta del intento, creada al empezar con `givenAnswer` en null.
+ * Responder la actualiza. Es la base de la analítica de dominio por tema (fase 4).
+ * Si se borra la pregunta (al borrar su material) desaparece también su respuesta.
+ */
+export const attemptAnswers = pgTable(
+  "attempt_answers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    attemptId: uuid("attempt_id")
+      .notNull()
+      .references(() => quizAttempts.id, { onDelete: "cascade" }),
+    questionId: uuid("question_id")
+      .notNull()
+      .references(() => questions.id, { onDelete: "cascade" }),
+    /** Orden de la pregunta dentro del intento. */
+    position: integer("position").notNull(),
+    /** "a" | "b" | "c" | "d"; null si todavía no se respondió. */
+    givenAnswer: text("given_answer"),
+    isCorrect: boolean("is_correct"),
+    /** Segundos que tardó, medidos por el cliente. */
+    seconds: integer("seconds"),
+    answeredAt: timestamp("answered_at"),
+  },
+  (table) => ({
+    attemptQuestionIdx: uniqueIndex("attempt_answers_attempt_question_idx").on(table.attemptId, table.questionId),
+    questionIdx: index("attempt_answers_question_idx").on(table.questionId),
+  }),
+);
+
+export const quizAttemptsRelations = relations(quizAttempts, ({ many }) => ({
+  answers: many(attemptAnswers),
+}));
+
+export const attemptAnswersRelations = relations(attemptAnswers, ({ one }) => ({
+  attempt: one(quizAttempts, { fields: [attemptAnswers.attemptId], references: [quizAttempts.id] }),
+  question: one(questions, { fields: [attemptAnswers.questionId], references: [questions.id] }),
+}));
+
 export const usersRelations = relations(users, ({ many }) => ({
   subjects: many(subjects),
   usageEvents: many(usageEvents),
