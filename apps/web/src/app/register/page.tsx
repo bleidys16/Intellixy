@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Logo } from "@/components/Logo";
 import { apiFetch, ApiError } from "@/lib/api";
 
 export default function RegisterPage() {
@@ -25,7 +26,7 @@ export default function RegisterPage() {
       router.push("/");
       router.refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Algo salió mal, probá de nuevo");
+      setError(err instanceof ApiError ? err.message : "Algo salió mal, inténtalo de nuevo");
     } finally {
       setLoading(false);
     }
@@ -37,7 +38,8 @@ export default function RegisterPage() {
         onSubmit={handleSubmit}
         className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-sm"
       >
-        <h1 className="font-display text-2xl font-semibold">Crear cuenta</h1>
+        <Logo className="mx-auto h-10" />
+        <h1 className="mt-6 font-display text-2xl font-semibold">Crear cuenta</h1>
         <p className="mt-1 text-sm text-ciruela/60">Tu material. Tu aprendizaje.</p>
 
         <label className="mt-6 block text-sm font-medium">
@@ -85,9 +87,9 @@ export default function RegisterPage() {
         </button>
 
         <p className="mt-4 text-center text-sm text-ciruela/60">
-          ¿Ya tenés cuenta?{" "}
+          ¿Ya tienes cuenta?{" "}
           <Link href="/login" className="font-medium text-teal-deep">
-            Iniciá sesión
+            Inicia sesión
           </Link>
         </p>
       </form>

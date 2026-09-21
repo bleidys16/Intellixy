@@ -103,7 +103,7 @@ export default function HomePage() {
 
         {subjects.length === 0 ? (
           <p className="mt-10 text-center text-ciruela/50">
-            Todavía no tenés materias. Creá la primera arriba.
+            Todavía no tienes materias. Crea la primera arriba.
           </p>
         ) : (
           <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">

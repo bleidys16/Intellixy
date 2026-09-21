@@ -26,3 +26,33 @@ export interface Question {
   createdAt: string;
   topic?: { id: string; name: string };
 }
+
+export type MaterialStatus = "pendiente" | "procesando" | "listo" | "error";
+
+export interface Material {
+  id: string;
+  subjectId: string;
+  type: "text" | "pdf" | "image";
+  name: string;
+  status: MaterialStatus;
+  mimeType: string | null;
+  sizeBytes: number;
+  pageCount: number | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MaterialChunk {
+  id: string;
+  page: number;
+  text: string;
+}
+
+export interface GenerationResult {
+  questions: Question[];
+  /** Preguntas que el modelo devolvió pero no pasaron la verificación de cita. */
+  discarded: number;
+  /** true si el material era muy largo y solo se usó una parte. */
+  sampled: boolean;
+}

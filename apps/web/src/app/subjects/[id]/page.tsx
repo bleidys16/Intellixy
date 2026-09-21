@@ -1,13 +1,17 @@
 "use client";
 
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { MaterialCard } from "@/components/MaterialCard";
+import { MaterialUploader } from "@/components/MaterialUploader";
 import { TopNav } from "@/components/TopNav";
 import { apiFetch, ApiError } from "@/lib/api";
 import { useSession } from "@/lib/useSession";
-import type { Question, Subject } from "@/lib/types";
+import type { GenerationResult, Material, Question, Subject } from "@/lib/types";
 
 const OPTION_LETTERS = ["a", "b", "c", "d"] as const;
+const POLL_INTERVAL_MS = 2500;
 
 export default function SubjectPage() {
   const { id } = useParams<{ id: string }>();
@@ -15,10 +19,10 @@ export default function SubjectPage() {
   const router = useRouter();
 
   const [subject, setSubject] = useState<Subject | null>(null);
+  const [materials, setMaterials] = useState<Material[] | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [materialName, setMaterialName] = useState("");
-  const [text, setText] = useState("");
-  const [generating, setGenerating] = useState(false);
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -27,37 +31,78 @@ export default function SubjectPage() {
 
   useEffect(() => {
     if (!user) return;
-    apiFetch<{ subject: Subject }>(`/subjects/${id}`).then((data) => setSubject(data.subject));
-    apiFetch<{ questions: Question[] }>(`/subjects/${id}/questions`).then((data) =>
-      setQuestions(data.questions),
-    );
-  }, [user, id]);
+    apiFetch<{ subject: Subject }>(`/subjects/${id}`)
+      .then((data) => setSubject(data.subject))
+      .catch(() => router.push("/"));
+    apiFetch<{ materials: Material[] }>(`/subjects/${id}/materials`)
+      .then((data) => setMaterials(data.materials))
+      .catch(() => {});
+    apiFetch<{ questions: Question[] }>(`/subjects/${id}/questions`)
+      .then((data) => setQuestions(data.questions))
+      .catch(() => {});
+  }, [user, id, router]);
 
-  async function handleGenerate(e: React.FormEvent) {
-    e.preventDefault();
+  // Mientras algún material se esté leyendo, se consulta la lista cada pocos segundos.
+  const hasPending = materials?.some((m) => m.status === "pendiente" || m.status === "procesando");
+  useEffect(() => {
+    if (!user || !hasPending) return;
+    const timer = window.setInterval(() => {
+      apiFetch<{ materials: Material[] }>(`/subjects/${id}/materials`)
+        .then((data) => setMaterials(data.materials))
+        .catch(() => {});
+    }, POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [user, id, hasPending]);
+
+  function handleCreated(material: Material) {
+    setMaterials((prev) => [material, ...(prev ?? [])]);
+  }
+
+  async function handleGenerate(material: Material) {
     setError(null);
-    setGenerating(true);
+    setNotice(null);
+    setGeneratingId(material.id);
     try {
-      // Dos pasos: primero se crea el material, luego se piden las preguntas de ese material.
-      const created = await apiFetch<{ material: { id: string } }>(
-        `/subjects/${id}/materials/text`,
-        {
-          method: "POST",
-          body: JSON.stringify({ name: materialName || "Texto pegado", text }),
-        },
-      );
-      const data = await apiFetch<{ questions: Question[] }>(`/subjects/${id}/questions/generate`, {
+      const result = await apiFetch<GenerationResult>(`/subjects/${id}/questions/generate`, {
         method: "POST",
-        body: JSON.stringify({ materialId: created.material.id }),
+        body: JSON.stringify({ materialId: material.id }),
       });
-      setQuestions((prev) => [...data.questions, ...prev]);
-      setMaterialName("");
-      setText("");
+      setQuestions((prev) => [...result.questions, ...prev]);
+
+      const count = result.questions.length;
+      const parts = [
+        `Se generaron ${count} ${count === 1 ? "pregunta" : "preguntas"} de «${material.name}».`,
+      ];
+      if (result.sampled) {
+        parts.push("El material es largo, así que se usaron páginas repartidas de todo el documento.");
+      }
+      if (result.discarded > 0) {
+        parts.push(
+          `${result.discarded} se descartaron porque su cita no se pudo verificar en el material.`,
+        );
+      }
+      setNotice(parts.join(" "));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudieron generar las preguntas");
     } finally {
-      setGenerating(false);
+      setGeneratingId(null);
     }
+  }
+
+  async function handleRetry(material: Material) {
+    const data = await apiFetch<{ material: Material }>(
+      `/subjects/${id}/materials/${material.id}/retry`,
+      { method: "POST" },
+    );
+    setMaterials((prev) => prev?.map((m) => (m.id === material.id ? data.material : m)) ?? prev);
+  }
+
+  async function handleDelete(material: Material) {
+    await apiFetch(`/subjects/${id}/materials/${material.id}`, { method: "DELETE" });
+    setMaterials((prev) => prev?.filter((m) => m.id !== material.id) ?? prev);
+    // Borrar un material borra también sus preguntas: se vuelve a pedir la lista.
+    const data = await apiFetch<{ questions: Question[] }>(`/subjects/${id}/questions`);
+    setQuestions(data.questions);
   }
 
   if (loading || !user) {
@@ -69,49 +114,58 @@ export default function SubjectPage() {
       <TopNav user={user} />
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-8 sm:px-10">
-        <h1 className="font-display text-3xl font-semibold">{subject?.name ?? "Materia"}</h1>
+        <Link href="/" className="text-sm font-medium text-teal-deep hover:underline">
+          ← Mis materias
+        </Link>
+        <h1 className="mt-2 font-display text-3xl font-semibold">{subject?.name ?? "Materia"}</h1>
 
-        <form onSubmit={handleGenerate} className="mt-6 rounded-2xl bg-white p-5 shadow-sm">
-          <label className="block text-sm font-medium">
-            Nombre del material (opcional)
-            <input
-              value={materialName}
-              onChange={(e) => setMaterialName(e.target.value)}
-              placeholder="ej. Apuntes de clase 3"
-              className="mt-1 w-full rounded-lg border border-ciruela/15 px-3 py-2 outline-none focus:border-turquesa"
-            />
-          </label>
+        <h2 className="mt-8 font-display text-xl font-semibold">Materiales</h2>
+        <div className="mt-3">
+          <MaterialUploader subjectId={id} onCreated={handleCreated} />
+        </div>
 
-          <label className="mt-4 block text-sm font-medium">
-            Pegá tu texto
-            <textarea
-              required
-              minLength={50}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={8}
-              placeholder="Pegá acá tus apuntes, un resumen, o cualquier texto de estudio..."
-              className="mt-1 w-full rounded-lg border border-ciruela/15 px-3 py-2 outline-none focus:border-turquesa"
-            />
-          </label>
+        {materials === null ? (
+          <p className="mt-4 text-ciruela/50">Cargando materiales...</p>
+        ) : materials.length === 0 ? (
+          <p className="mt-4 text-ciruela/50">
+            Todavía no has añadido material. Sube un PDF, una foto de tus apuntes o pega un texto.
+          </p>
+        ) : (
+          <ul className="mt-4 flex flex-col gap-3">
+            {materials.map((material) => (
+              <MaterialCard
+                key={material.id}
+                material={material}
+                subjectId={id}
+                generating={generatingId === material.id}
+                anyGenerating={generatingId !== null}
+                onGenerate={handleGenerate}
+                onRetry={handleRetry}
+                onDelete={handleDelete}
+              />
+            ))}
+          </ul>
+        )}
 
-          {error && <p className="mt-3 text-sm text-wine">{error}</p>}
-
-          <button
-            type="submit"
-            disabled={generating}
-            className="mt-4 rounded-full bg-turquesa px-5 py-2.5 font-medium text-ciruela transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
-            {generating ? "Generando... (puede tardar hasta 2 min)" : "Generar preguntas"}
-          </button>
-        </form>
+        {notice && (
+          <p role="status" className="mt-4 rounded-xl bg-yuzu/50 px-4 py-3 text-sm">
+            {notice}
+          </p>
+        )}
+        {error && (
+          <p role="alert" className="mt-4 rounded-xl bg-wine/10 px-4 py-3 text-sm text-wine">
+            {error}
+          </p>
+        )}
 
         <h2 className="mt-10 font-display text-xl font-semibold">
           Preguntas generadas {questions.length > 0 && `(${questions.length})`}
         </h2>
 
         {questions.length === 0 ? (
-          <p className="mt-3 text-ciruela/50">Todavía no generaste preguntas para esta materia.</p>
+          <p className="mt-3 text-ciruela/50">
+            Todavía no has generado preguntas. Cuando un material esté listo, pulsa «Generar preguntas».
+          </p>
         ) : (
           <ul className="mt-4 flex flex-col gap-4">
             {questions.map((q) => (
