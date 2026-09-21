@@ -6,7 +6,7 @@ import multer from "multer";
 import { z } from "zod";
 import { requireAuth } from "../auth/middleware.js";
 import { db } from "../db/client.js";
-import { materialChunks, materials, questions, subjects, users } from "../db/schema.js";
+import { generationJobs, materialChunks, materials, questions, subjects, users } from "../db/schema.js";
 import { detectFileType } from "../files/detectType.js";
 import { getLimits, limitReached } from "../limits.js";
 import { storage } from "../storage/index.js";
@@ -309,6 +309,16 @@ materialsRouter.delete<MaterialParams>(
     }
     if (material.status === "procesando") {
       res.status(409).json({ error: "El material se está procesando; espera a que termine" });
+      return;
+    }
+    const generating = await db.query.generationJobs.findFirst({
+      where: and(
+        eq(generationJobs.materialId, material.id),
+        inArray(generationJobs.status, ["pendiente", "procesando"]),
+      ),
+    });
+    if (generating) {
+      res.status(409).json({ error: "Se están generando preguntas de este material; espera a que termine" });
       return;
     }
 

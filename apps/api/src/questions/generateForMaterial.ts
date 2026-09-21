@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { generateQuestions } from "../ai/generateQuestions.js";
 import type { GeneratedQuestion, MaterialBlock } from "../ai/types.js";
 import { db } from "../db/client.js";
@@ -63,8 +63,20 @@ function isWellFormed(q: GeneratedQuestion): boolean {
   );
 }
 
+export interface MaterialRef {
+  id: string;
+  name: string;
+  type: string;
+}
+
 export interface GenerationResult {
-  questions: Array<typeof questions.$inferSelect & { topic: { id: string; name: string } }>;
+  questions: Array<
+    typeof questions.$inferSelect & {
+      topic: { id: string; name: string };
+      /** Material de origen: la interfaz lo usa para separar las preguntas por material. */
+      material: MaterialRef;
+    }
+  >;
   /** Preguntas que el modelo devolvió pero se descartaron (mal formadas o con cita que no existe). */
   discarded: number;
   /** true si el material era demasiado largo y solo se envió una parte al modelo. */
@@ -79,61 +91,74 @@ export interface GenerationResult {
  */
 export async function generateForMaterial(input: {
   subjectId: string;
-  materialId: string;
+  material: MaterialRef;
   count: number;
 }): Promise<GenerationResult> {
+  const t0 = Date.now();
   const allChunks = await db.query.materialChunks.findMany({
-    where: eq(materialChunks.materialId, input.materialId),
+    where: eq(materialChunks.materialId, input.material.id),
     orderBy: (c, { asc }) => [asc(c.page)],
   });
   const chosen = selectChunks(allChunks);
   const blocks: MaterialBlock[] = chosen.map((c) => ({ page: c.page, text: c.text }));
 
+  const tModel = Date.now();
   const generated = await generateQuestions(blocks, input.count);
+  const modelMs = Date.now() - tModel;
 
   // La cita se valida contra el texto completo guardado de esa página.
   const chunkByPage = new Map(allChunks.map((c) => [c.page, c]));
-  const saved: GenerationResult["questions"] = [];
-  let discarded = 0;
-
+  const valid: Array<{ q: GeneratedQuestion; chunk: Chunk; topicName: string }> = [];
   for (const q of generated) {
     const chunk = isWellFormed(q) ? chunkByPage.get(q.source.page) : undefined;
-    if (!chunk || !normalize(chunk.text).includes(normalize(q.source.quote))) {
-      discarded++;
-      continue;
-    }
-
-    const topicName = q.topic.trim().slice(0, 120);
-    const [inserted] = await db
-      .insert(topics)
-      .values({ subjectId: input.subjectId, name: topicName })
-      .onConflictDoNothing({ target: [topics.subjectId, topics.name] })
-      .returning();
-    const topic =
-      inserted ??
-      (await db.query.topics.findFirst({
-        where: and(eq(topics.subjectId, input.subjectId), eq(topics.name, topicName)),
-      }));
-    if (!topic) {
-      discarded++;
-      continue;
-    }
-
-    const [row] = await db
-      .insert(questions)
-      .values({
-        subjectId: input.subjectId,
-        topicId: topic.id,
-        chunkId: chunk.id,
-        prompt: q.question,
-        options: q.options,
-        correctOption: q.correctOption,
-        explanation: q.explanation,
-        sourceQuote: q.source.quote,
-      })
-      .returning();
-    saved.push({ ...row, topic: { id: topic.id, name: topic.name } });
+    if (!chunk || !normalize(chunk.text).includes(normalize(q.source.quote))) continue;
+    valid.push({ q, chunk, topicName: q.topic.trim().slice(0, 120) });
   }
+
+  // Escritura en lote: una consulta para los temas y otra para las preguntas (antes eran ~3 por pregunta).
+  const saved: GenerationResult["questions"] = [];
+  if (valid.length > 0) {
+    const topicNames = [...new Set(valid.map((v) => v.topicName))];
+    await db
+      .insert(topics)
+      .values(topicNames.map((name) => ({ subjectId: input.subjectId, name })))
+      .onConflictDoNothing({ target: [topics.subjectId, topics.name] });
+    const topicRows = await db.query.topics.findMany({
+      where: and(eq(topics.subjectId, input.subjectId), inArray(topics.name, topicNames)),
+    });
+    const topicByName = new Map(topicRows.map((t) => [t.name, t]));
+
+    const rows = valid.filter((v) => topicByName.has(v.topicName));
+    const inserted = await db
+      .insert(questions)
+      .values(
+        rows.map(({ q, chunk, topicName }) => ({
+          subjectId: input.subjectId,
+          topicId: topicByName.get(topicName)!.id,
+          chunkId: chunk.id,
+          prompt: q.question,
+          options: q.options,
+          correctOption: q.correctOption,
+          explanation: q.explanation,
+          sourceQuote: q.source.quote,
+        })),
+      )
+      .returning();
+    for (const row of inserted) {
+      const topic = topicRows.find((t) => t.id === row.topicId)!;
+      saved.push({
+        ...row,
+        topic: { id: topic.id, name: topic.name },
+        material: input.material,
+      });
+    }
+  }
+  const discarded = generated.length - saved.length;
+
+  console.log(
+    `[generar] ${input.material.name}: modelo ${modelMs} ms, total ${Date.now() - t0} ms, ` +
+      `${generated.length} devueltas, ${saved.length} guardadas`,
+  );
 
   const charsSent = chosen.reduce((sum, c) => sum + c.text.length, 0);
   const charsTotal = allChunks.reduce((sum, c) => sum + c.text.length, 0);

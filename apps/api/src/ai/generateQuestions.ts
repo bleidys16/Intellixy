@@ -7,9 +7,12 @@ Tu unica fuente de verdad es el material que te va a pasar el usuario a continua
 
 1. Cada pregunta debe basarse EXCLUSIVAMENTE en el texto dado, nunca en conocimiento general externo, aunque lo sepas.
 2. Cada pregunta debe traer una cita textual corta (entre 8 y 25 palabras) copiada LITERALMENTE del material, que respalde la respuesta correcta. Si no podes copiar un fragmento real y exacto, no generes esa pregunta.
-3. Cada pregunta es de opcion multiple con 4 opciones (a, b, c, d), una sola correcta. Las opciones incorrectas deben ser plausibles, no absurdas.
-4. Repartí las preguntas entre las distintas partes del material, no te concentres en una sola seccion.
-5. Devolvé SOLO un JSON valido, sin texto adicional, sin markdown, sin bloques de codigo, con exactamente este esquema:
+3. Cada pregunta es de opcion multiple con 4 opciones (a, b, c, d), una sola correcta.
+4. Calidad de las opciones incorrectas: deben ser plausibles para alguien que estudio a medias. Usa errores comunes, conceptos parecidos del mismo material o afirmaciones que suenan bien pero son falsas segun el texto. Prohibido: opciones absurdas o que contradigan el sentido comun ("las personas seran malas"), opciones que digan lo contrario exacto de la correcta cambiando una palabra, y opciones que se solapen entre si o con la correcta (si dos opciones podrian ser verdaderas, reformula la pregunta).
+5. Prohibido usar "todas las anteriores", "ninguna de las anteriores" o combinaciones de opciones. Las cuatro opciones deben tener longitud y estilo parecidos, para que la correcta no se note por ser mas larga o mas especifica. Varia la letra de la respuesta correcta entre preguntas.
+6. Preguntá por conceptos, causas, relaciones o definiciones, no por datos triviales que se adivinan sin haber estudiado.
+7. Repartí las preguntas entre las distintas partes del material, no te concentres en una sola seccion.
+8. Devolvé SOLO un JSON valido, sin texto adicional, sin markdown, sin bloques de codigo, con exactamente este esquema:
 
 {
   "questions": [

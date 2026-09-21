@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { MaterialCard } from "@/components/MaterialCard";
 import { MaterialUploader } from "@/components/MaterialUploader";
+import { QuestionGroups } from "@/components/QuestionGroups";
 import { TopNav } from "@/components/TopNav";
 import { apiFetch, ApiError } from "@/lib/api";
 import { useSession } from "@/lib/useSession";
-import type { GenerationResult, Material, Question, Subject } from "@/lib/types";
+import type { GenerationJob, Material, Question, Subject } from "@/lib/types";
 
-const OPTION_LETTERS = ["a", "b", "c", "d"] as const;
 const POLL_INTERVAL_MS = 2500;
 
 export default function SubjectPage() {
@@ -21,13 +21,57 @@ export default function SubjectPage() {
   const [subject, setSubject] = useState<Subject | null>(null);
   const [materials, setMaterials] = useState<Material[] | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [jobs, setJobs] = useState<GenerationJob[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Trabajos ya avisados: cada generación terminada se comunica una sola vez.
+  const handledJobs = useRef(new Set<string>());
+  const materialsRef = useRef<Material[] | null>(null);
+  useEffect(() => {
+    materialsRef.current = materials;
+  }, [materials]);
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
   }, [loading, user, router]);
+
+  const refreshQuestions = useCallback(async () => {
+    const data = await apiFetch<{ questions: Question[] }>(`/subjects/${id}/questions`);
+    setQuestions(data.questions);
+  }, [id]);
+
+  /** Aplica la lista de trabajos del servidor y avisa de los que acaban de terminar. */
+  const syncJobs = useCallback(
+    (list: GenerationJob[], announce: boolean) => {
+      setJobs(list);
+      for (const job of list) {
+        if ((job.status !== "listo" && job.status !== "error") || handledJobs.current.has(job.id)) continue;
+        handledJobs.current.add(job.id);
+        if (!announce) continue;
+
+        if (job.status === "error") {
+          setNotice(null);
+          setError(job.errorMessage ?? "No se pudieron generar las preguntas");
+          continue;
+        }
+        const name = materialsRef.current?.find((m) => m.id === job.materialId)?.name ?? "tu material";
+        const parts = [
+          `Se generaron ${job.questionCount} ${job.questionCount === 1 ? "pregunta" : "preguntas"} de «${name}».`,
+        ];
+        if (job.sampled) {
+          parts.push("El material es largo, así que se usaron páginas repartidas de todo el documento.");
+        }
+        if (job.discarded > 0) {
+          parts.push(`${job.discarded} se descartaron porque su cita no se pudo verificar en el material.`);
+        }
+        setError(null);
+        setNotice(parts.join(" "));
+        void refreshQuestions().catch(() => {});
+      }
+    },
+    [refreshQuestions],
+  );
 
   useEffect(() => {
     if (!user) return;
@@ -40,7 +84,11 @@ export default function SubjectPage() {
     apiFetch<{ questions: Question[] }>(`/subjects/${id}/questions`)
       .then((data) => setQuestions(data.questions))
       .catch(() => {});
-  }, [user, id, router]);
+    // Si se recargó la página mientras se generaba, se recupera el estado sin volver a avisar de lo ya terminado.
+    apiFetch<{ jobs: GenerationJob[] }>(`/subjects/${id}/generations`)
+      .then((data) => syncJobs(data.jobs, false))
+      .catch(() => {});
+  }, [user, id, router, syncJobs]);
 
   // Mientras algún material se esté leyendo, se consulta la lista cada pocos segundos.
   const hasPending = materials?.some((m) => m.status === "pendiente" || m.status === "procesando");
@@ -54,6 +102,18 @@ export default function SubjectPage() {
     return () => window.clearInterval(timer);
   }, [user, id, hasPending]);
 
+  // Mientras haya una generación en curso se consulta el estado cada pocos segundos.
+  const hasActiveJob = jobs.some((j) => j.status === "pendiente" || j.status === "procesando");
+  useEffect(() => {
+    if (!user || !hasActiveJob) return;
+    const timer = window.setInterval(() => {
+      apiFetch<{ jobs: GenerationJob[] }>(`/subjects/${id}/generations`)
+        .then((data) => syncJobs(data.jobs, true))
+        .catch(() => {});
+    }, POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [user, id, hasActiveJob, syncJobs]);
+
   function handleCreated(material: Material) {
     setMaterials((prev) => [material, ...(prev ?? [])]);
   }
@@ -61,31 +121,22 @@ export default function SubjectPage() {
   async function handleGenerate(material: Material) {
     setError(null);
     setNotice(null);
-    setGeneratingId(material.id);
     try {
-      const result = await apiFetch<GenerationResult>(`/subjects/${id}/questions/generate`, {
+      const { job } = await apiFetch<{ job: GenerationJob }>(`/subjects/${id}/questions/generate`, {
         method: "POST",
         body: JSON.stringify({ materialId: material.id }),
       });
-      setQuestions((prev) => [...result.questions, ...prev]);
-
-      const count = result.questions.length;
-      const parts = [
-        `Se generaron ${count} ${count === 1 ? "pregunta" : "preguntas"} de «${material.name}».`,
-      ];
-      if (result.sampled) {
-        parts.push("El material es largo, así que se usaron páginas repartidas de todo el documento.");
-      }
-      if (result.discarded > 0) {
-        parts.push(
-          `${result.discarded} se descartaron porque su cita no se pudo verificar en el material.`,
-        );
-      }
-      setNotice(parts.join(" "));
+      setJobs((prev) => [job, ...prev.filter((j) => j.id !== job.id)]);
+      setNotice(
+        `Estamos generando las preguntas de «${material.name}». Puedes seguir usando la app; te avisamos cuando estén listas.`,
+      );
     } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        // Ya había una generación en curso para este material: se muestra esa.
+        const data = await apiFetch<{ jobs: GenerationJob[] }>(`/subjects/${id}/generations`).catch(() => null);
+        if (data) syncJobs(data.jobs, false);
+      }
       setError(err instanceof ApiError ? err.message : "No se pudieron generar las preguntas");
-    } finally {
-      setGeneratingId(null);
     }
   }
 
@@ -101,8 +152,7 @@ export default function SubjectPage() {
     await apiFetch(`/subjects/${id}/materials/${material.id}`, { method: "DELETE" });
     setMaterials((prev) => prev?.filter((m) => m.id !== material.id) ?? prev);
     // Borrar un material borra también sus preguntas: se vuelve a pedir la lista.
-    const data = await apiFetch<{ questions: Question[] }>(`/subjects/${id}/questions`);
-    setQuestions(data.questions);
+    await refreshQuestions();
   }
 
   if (loading || !user) {
@@ -113,7 +163,7 @@ export default function SubjectPage() {
     <div className="flex flex-1 flex-col">
       <TopNav user={user} />
 
-      <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-8 sm:px-10">
+      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:px-10 sm:py-8">
         <Link href="/" className="text-sm font-medium text-teal-deep hover:underline">
           ← Mis materias
         </Link>
@@ -137,8 +187,11 @@ export default function SubjectPage() {
                 key={material.id}
                 material={material}
                 subjectId={id}
-                generating={generatingId === material.id}
-                anyGenerating={generatingId !== null}
+                generation={
+                  jobs.find(
+                    (j) => j.materialId === material.id && (j.status === "pendiente" || j.status === "procesando"),
+                  ) ?? null
+                }
                 onGenerate={handleGenerate}
                 onRetry={handleRetry}
                 onDelete={handleDelete}
@@ -167,36 +220,7 @@ export default function SubjectPage() {
             Todavía no has generado preguntas. Cuando un material esté listo, pulsa «Generar preguntas».
           </p>
         ) : (
-          <ul className="mt-4 flex flex-col gap-4">
-            {questions.map((q) => (
-              <li key={q.id} className="rounded-2xl bg-white p-5 shadow-sm">
-                {q.topic && (
-                  <span className="rounded-full bg-card-lime px-2.5 py-0.5 text-xs font-medium text-ciruela">
-                    {q.topic.name}
-                  </span>
-                )}
-                <p className="mt-2 font-medium">{q.prompt}</p>
-                <ul className="mt-3 flex flex-col gap-1.5">
-                  {OPTION_LETTERS.map((letter) => (
-                    <li
-                      key={letter}
-                      className={`rounded-lg px-3 py-2 text-sm ${
-                        letter === q.correctOption
-                          ? "bg-teal-deep/10 font-medium text-teal-deep"
-                          : "text-ciruela/70"
-                      }`}
-                    >
-                      {letter}) {q.options[letter]}
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-3 text-sm text-ciruela/60">{q.explanation}</p>
-                <p className="mt-2 border-l-2 border-turquesa pl-2 text-xs italic text-ciruela/50">
-                  “{q.sourceQuote}”
-                </p>
-              </li>
-            ))}
-          </ul>
+          <QuestionGroups questions={questions} />
         )}
       </main>
     </div>

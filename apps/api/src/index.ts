@@ -5,6 +5,7 @@ import express from "express";
 import { authRouter } from "./routes/auth.js";
 import { materialsRouter } from "./routes/materials.js";
 import { subjectsRouter } from "./routes/subjects.js";
+import { startGenerationWorker } from "./worker/generationWorker.js";
 import { startMaterialWorker } from "./worker/materialWorker.js";
 
 const app = express();
@@ -25,4 +26,5 @@ app.use("/subjects/:subjectId/materials", materialsRouter);
 app.listen(port, () => {
   console.log(`API listening on http://localhost:${port}`);
   startMaterialWorker();
+  startGenerationWorker();
 });

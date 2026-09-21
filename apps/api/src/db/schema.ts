@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -116,6 +117,43 @@ export const usageEvents = pgTable(
       table.kind,
       table.createdAt,
     ),
+  }),
+);
+
+/**
+ * Cola de generación de preguntas. La IA tarda decenas de segundos, así que la petición
+ * solo encola y un worker hace el trabajo; el cliente (web o Android) consulta el estado.
+ * status: "pendiente" → "procesando" → "listo" | "error".
+ */
+export const generationJobs = pgTable(
+  "generation_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => subjects.id, { onDelete: "cascade" }),
+    materialId: uuid("material_id")
+      .notNull()
+      .references(() => materials.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("pendiente"),
+    /** Preguntas pedidas. */
+    count: integer("count").notNull(),
+    /** Evento de cuota reservado al encolar; se reembolsa si el trabajo falla. Sin FK: el reembolso lo borra. */
+    usageEventId: uuid("usage_event_id"),
+    /** Resultado: preguntas guardadas, descartadas por cita no verificable, y si el material se muestreó. */
+    questionCount: integer("question_count").notNull().default(0),
+    discarded: integer("discarded").notNull().default(0),
+    sampled: boolean("sampled").notNull().default(false),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    subjectStatusIdx: index("generation_jobs_subject_status_idx").on(table.subjectId, table.status),
+    statusCreatedIdx: index("generation_jobs_status_created_idx").on(table.status, table.createdAt),
   }),
 );
 

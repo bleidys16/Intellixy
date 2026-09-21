@@ -2,15 +2,13 @@
 
 import { useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
-import type { Material, MaterialChunk, MaterialStatus } from "@/lib/types";
+import type { GenerationJob, Material, MaterialChunk, MaterialStatus } from "@/lib/types";
 
 interface Props {
   material: Material;
   subjectId: string;
-  /** true si las preguntas de ESTE material se están generando ahora. */
-  generating: boolean;
-  /** true si hay una generación en curso (de este u otro material): solo se permite una a la vez. */
-  anyGenerating: boolean;
+  /** Generación de preguntas en curso (en cola o procesando) para ESTE material, si la hay. */
+  generation: GenerationJob | null;
   onGenerate: (material: Material) => void;
   onRetry: (material: Material) => Promise<void>;
   onDelete: (material: Material) => Promise<void>;
@@ -74,8 +72,7 @@ function TypeIcon({ type }: { type: Material["type"] }) {
 export function MaterialCard({
   material,
   subjectId,
-  generating,
-  anyGenerating,
+  generation,
   onGenerate,
   onRetry,
   onDelete,
@@ -89,6 +86,7 @@ export function MaterialCard({
 
   const status = STATUS[material.status];
   const inProgress = material.status === "pendiente" || material.status === "procesando";
+  const generating = generation !== null;
 
   async function toggleText() {
     if (open) {
@@ -164,6 +162,18 @@ export function MaterialCard({
               Estamos leyendo tu archivo. Puedes seguir usando la app; esto se actualiza solo.
             </p>
           )}
+          {generation && (
+            <p role="status" className="mt-2 flex items-center gap-2 text-sm text-ciruela/60">
+              <span
+                aria-hidden
+                className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-ciruela/30 border-t-ciruela"
+              />
+              <span>
+                {generation.status === "pendiente" ? "Tus preguntas están en cola." : "Generando preguntas."}{" "}
+                Puedes seguir usando la app; esto se actualiza solo.
+              </span>
+            </p>
+          )}
         </div>
       </div>
 
@@ -196,10 +206,14 @@ export function MaterialCard({
             <>
               <button
                 onClick={() => onGenerate(material)}
-                disabled={anyGenerating}
+                disabled={generating}
                 className="rounded-full bg-turquesa px-3.5 py-1.5 text-sm font-medium text-ciruela transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {generating ? "Generando... (hasta 2 min)" : "Generar preguntas"}
+                {generation
+                  ? generation.status === "pendiente"
+                    ? "En cola..."
+                    : "Generando..."
+                  : "Generar preguntas"}
               </button>
               <button onClick={() => void toggleText()} className={secondaryButton}>
                 {open ? "Ocultar texto" : "Ver texto extraído"}
