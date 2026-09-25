@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TopNav } from "@/components/TopNav";
+import { ProgressBar } from "@/components/ProgressBar";
 import { apiFetch, ApiError } from "@/lib/api";
 import { formatDueIn } from "@/lib/relativeTime";
 import { useSession } from "@/lib/useSession";
@@ -211,16 +212,7 @@ export default function FlashcardsStudyPage() {
           Tarjeta {index + 1} de {cards.length}
         </span>
       </div>
-      <div
-        className="mt-3 h-2 overflow-hidden rounded-full bg-ciruela/10"
-        role="progressbar"
-        aria-label="Progreso del repaso"
-        aria-valuemin={0}
-        aria-valuemax={cards.length}
-        aria-valuenow={index}
-      >
-        <div className="h-full rounded-full bg-turquesa transition-all" style={{ width: `${(index / cards.length) * 100}%` }} />
-      </div>
+      <ProgressBar value={index} max={cards.length} label="Progreso del repaso" className="mt-3" />
 
       <section className="mt-6 rounded-2xl bg-white p-5 shadow-sm sm:p-8">
         <div className="flex flex-wrap items-center gap-2">

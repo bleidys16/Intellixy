@@ -9,6 +9,7 @@ export interface SubjectSummary {
   materialCount: number;
   /** Dominio general de 0 a 1; null mientras no haya respuestas suficientes para medirlo. */
   mastery: number | null;
+  status: TopicStatus;
   /** Tarjetas que ya toca repasar. */
   dueCards: number;
   /** Última vez que respondió o repasó algo; null si nunca. */
@@ -230,7 +231,7 @@ export type Recommendation =
   | { type: "al_dia"; message: string };
 
 export interface SubjectProgress {
-  overall: { mastery: number | null; evidenceCount: number };
+  overall: { mastery: number | null; status: TopicStatus; evidenceCount: number };
   topics: TopicProgress[];
   quizzes: { finished: number; averagePercent: number | null; lastPercent: number | null };
   flashcards: { total: number; due: number };

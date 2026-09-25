@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
-import type { GenerationJob, GenerationKind, Material, MaterialChunk, MaterialStatus } from "@/lib/types";
+import { MaterialStatusChip } from "@/components/StatusChip";
+import type { GenerationJob, GenerationKind, Material, MaterialChunk } from "@/lib/types";
 
 interface Props {
   material: Material;
@@ -13,13 +14,6 @@ interface Props {
   onRetry: (material: Material) => Promise<void>;
   onDelete: (material: Material) => Promise<void>;
 }
-
-const STATUS: Record<MaterialStatus, { label: string; className: string }> = {
-  pendiente: { label: "En cola", className: "bg-ciruela/10 text-ciruela" },
-  procesando: { label: "Procesando", className: "bg-card-blue text-ciruela" },
-  listo: { label: "Listo", className: "bg-card-turquoise text-teal-deep" },
-  error: { label: "Error", className: "bg-wine/10 text-wine" },
-};
 
 const TYPE_LABEL: Record<Material["type"], string> = {
   pdf: "PDF",
@@ -84,7 +78,6 @@ export function MaterialCard({
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const status = STATUS[material.status];
   const inProgress = material.status === "pendiente" || material.status === "procesando";
   const generating = generation !== null;
 
@@ -134,17 +127,7 @@ export function MaterialCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <p className="truncate font-medium">{material.name}</p>
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${status.className}`}
-            >
-              {material.status === "procesando" && (
-                <span
-                  aria-hidden
-                  className="h-3 w-3 animate-spin rounded-full border-2 border-ciruela/30 border-t-ciruela"
-                />
-              )}
-              {status.label}
-            </span>
+            <MaterialStatusChip status={material.status} />
           </div>
 
           <p className="mt-0.5 text-xs text-ciruela/55">

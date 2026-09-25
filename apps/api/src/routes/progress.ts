@@ -133,6 +133,7 @@ progressRouter.get<SubjectParams>(
     const overallMastery = masteryOf(allEvidence, now);
     const overall = {
       mastery: allEvidence.length >= MIN_EVIDENCE ? overallMastery : null,
+      status: statusOf(overallMastery, allEvidence.length),
       evidenceCount: allEvidence.length,
     };
 

@@ -1,12 +1,14 @@
 import { and, count, eq, inArray, isNotNull, lte } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { attemptAnswers, flashcardReviews, flashcards, materials, quizAttempts, questions } from "../db/schema.js";
-import { type Evidence, masteryOf, MIN_EVIDENCE, reviewScore } from "./mastery.js";
+import { type Evidence, masteryOf, MIN_EVIDENCE, reviewScore, statusOf, type TopicStatus } from "./mastery.js";
 
 export interface SubjectSummary {
   materialCount: number;
   /** Dominio general de 0 a 1; null mientras haya menos de MIN_EVIDENCE evidencias. */
   mastery: number | null;
+  /** "dominado", "en_progreso", "debil" o "sin_datos" según el dominio general. */
+  status: TopicStatus;
   /** Tarjetas que ya toca repasar. */
   dueCards: number;
   /** Última vez que respondió una pregunta o repasó una tarjeta; null si nunca. */
@@ -20,7 +22,7 @@ export interface SubjectSummary {
 export async function summarizeSubjects(userId: string, subjectIds: string[], now = new Date()) {
   const result = new Map<string, SubjectSummary>();
   if (subjectIds.length === 0) return result;
-  for (const id of subjectIds) result.set(id, { materialCount: 0, mastery: null, dueCards: 0, lastStudiedAt: null });
+  for (const id of subjectIds) result.set(id, { materialCount: 0, mastery: null, status: "sin_datos", dueCards: 0, lastStudiedAt: null });
 
   const [materialRows, answerRows, reviewRows, dueRows] = await Promise.all([
     db
@@ -65,7 +67,10 @@ export async function summarizeSubjects(userId: string, subjectIds: string[], no
   for (const d of dueRows) result.get(d.subjectId)!.dueCards = d.n;
   for (const [subjectId, list] of evidence) {
     const summary = result.get(subjectId)!;
-    if (list.length >= MIN_EVIDENCE) summary.mastery = masteryOf(list, now);
+    if (list.length >= MIN_EVIDENCE) {
+      summary.mastery = masteryOf(list, now);
+      summary.status = statusOf(summary.mastery, list.length);
+    }
     summary.lastStudiedAt = list.reduce<Date | null>((latest, e) => (!latest || e.at > latest ? e.at : latest), null);
   }
   return result;

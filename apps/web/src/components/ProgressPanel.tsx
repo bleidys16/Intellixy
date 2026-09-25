@@ -4,34 +4,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
-import type { QuizAttempt, Recommendation, SubjectProgress, TopicProgress, TopicStatus } from "@/lib/types";
+import { ProgressBar } from "@/components/ProgressBar";
+import { Sparkle } from "@/components/Sparkle";
+import { TopicStatusChip } from "@/components/StatusChip";
+import type { QuizAttempt, Recommendation, SubjectProgress, TopicProgress } from "@/lib/types";
 
 interface Props {
   subjectId: string;
   /** Cambia cuando llegan preguntas o tarjetas nuevas, para volver a pedir el progreso. */
   refreshKey: number;
 }
-
-const STATUS_LABEL: Record<TopicStatus, string> = {
-  debil: "Débil",
-  en_progreso: "En progreso",
-  dominado: "Dominado",
-  sin_datos: "Sin datos suficientes",
-};
-
-const STATUS_CHIP: Record<TopicStatus, string> = {
-  debil: "bg-wine/10 text-wine",
-  en_progreso: "bg-yuzu/60 text-ciruela",
-  dominado: "bg-teal-deep/10 text-teal-deep",
-  sin_datos: "bg-ciruela/10 text-ciruela/60",
-};
-
-const STATUS_BAR: Record<TopicStatus, string> = {
-  debil: "bg-wine",
-  en_progreso: "bg-soft-blue",
-  dominado: "bg-teal-deep",
-  sin_datos: "bg-ciruela/20",
-};
 
 const percent = (mastery: number) => Math.round(mastery * 100);
 
@@ -97,6 +79,12 @@ export function ProgressPanel({ subjectId, refreshKey }: Props) {
             {overall.mastery !== null ? `${percent(overall.mastery)}%` : "—"}
           </p>
         </div>
+        <ProgressBar
+          value={overall.mastery !== null ? percent(overall.mastery) : null}
+          label="Dominio general"
+          tone="brand"
+          className="mt-2"
+        />
         {overall.mastery === null && (
           <p className="mt-1 text-sm text-ciruela/60">
             Responde al menos {progress.minEvidence} preguntas o repasa tarjetas para medir tu dominio.
@@ -120,7 +108,10 @@ export function ProgressPanel({ subjectId, refreshKey }: Props) {
                     key={`${rec.type}-${i}`}
                     className="flex flex-col gap-3 rounded-xl bg-yuzu/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <p className="text-sm">{rec.message}</p>
+                    <p className="flex items-start gap-2 text-sm">
+                      <Sparkle className="mt-0.5 h-4 w-4 shrink-0 text-teal-deep" />
+                      <span>{rec.message}</span>
+                    </p>
                     {cta && <div className="shrink-0">{cta}</div>}
                   </li>
                 );
@@ -157,23 +148,12 @@ function TopicRow({ topic, minEvidence }: { topic: TopicProgress; minEvidence: n
     <li>
       <div className="flex items-center justify-between gap-3">
         <span className="min-w-0 flex-1 truncate text-sm font-medium">{topic.name}</span>
-        <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_CHIP[topic.status]}`}>
-          {STATUS_LABEL[topic.status]}
-        </span>
+        <TopicStatusChip status={topic.status} />
         <span className="w-10 shrink-0 text-right text-sm font-semibold">
           {topic.mastery !== null ? `${value}%` : "—"}
         </span>
       </div>
-      <div
-        className="mt-1.5 h-2 overflow-hidden rounded-full bg-ciruela/10"
-        role="progressbar"
-        aria-label={`Dominio de ${topic.name}`}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={topic.mastery !== null ? value : undefined}
-      >
-        <div className={`h-full rounded-full ${STATUS_BAR[topic.status]}`} style={{ width: `${value}%` }} />
-      </div>
+      <ProgressBar value={topic.mastery !== null ? value : null} label={`Dominio de ${topic.name}`} tone={topic.status} className="mt-1.5" />
       <p className="mt-1 text-xs text-ciruela/60">{detail}</p>
     </li>
   );

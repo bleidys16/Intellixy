@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ProgressBar } from "@/components/ProgressBar";
+import { Sparkle } from "@/components/Sparkle";
 import { TopNav } from "@/components/TopNav";
 import { apiFetch } from "@/lib/api";
 import { formatAgo } from "@/lib/relativeTime";
@@ -174,18 +176,12 @@ function SubjectCard({ subject, now }: { subject: Subject; now: number }) {
       <div className="mt-auto pt-5">
         <div className="flex items-baseline justify-between text-sm">
           <span className="text-ciruela/70">Dominio</span>
-          <span className="font-display font-semibold">{percent !== null ? `${percent}%` : "Sin medir"}</span>
+          <span className="flex items-center gap-1.5 font-display font-semibold">
+            {summary?.status === "dominado" && <Sparkle className="h-4 w-4" />}
+            {percent !== null ? `${percent}%` : "Sin medir"}
+          </span>
         </div>
-        <div
-          className="mt-1.5 h-2 overflow-hidden rounded-full bg-ciruela/15"
-          role="progressbar"
-          aria-label={`Dominio de ${subject.name}`}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={percent ?? undefined}
-        >
-          <div className="h-full rounded-full bg-ciruela" style={{ width: `${percent ?? 0}%` }} />
-        </div>
+        <ProgressBar value={percent} label={`Dominio de ${subject.name}`} tone="card" className="mt-1.5" />
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-ciruela/60">
           <span>
             {summary?.lastStudiedAt ? `Último repaso: ${formatAgo(summary.lastStudiedAt, now)}` : "Aún no has estudiado"}

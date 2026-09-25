@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { TopNav } from "@/components/TopNav";
+import { ProgressBar } from "@/components/ProgressBar";
 import { apiFetch, ApiError } from "@/lib/api";
 import { useSession } from "@/lib/useSession";
 import type { OptionLetter, QuizAnswerResponse, QuizAttempt, QuizItem, QuizResult } from "@/lib/types";
@@ -152,19 +153,7 @@ export default function QuizPage() {
             Pregunta {index + 1} de {items.length}
           </span>
         </div>
-        <div
-          className="mt-3 h-2 overflow-hidden rounded-full bg-ciruela/10"
-          role="progressbar"
-          aria-label="Progreso del quiz"
-          aria-valuemin={0}
-          aria-valuemax={items.length}
-          aria-valuenow={answeredCount}
-        >
-          <div
-            className="h-full rounded-full bg-turquesa transition-all"
-            style={{ width: `${(answeredCount / items.length) * 100}%` }}
-          />
-        </div>
+        <ProgressBar value={answeredCount} max={items.length} label="Progreso del quiz" className="mt-3" />
 
         {current && (
           <>
