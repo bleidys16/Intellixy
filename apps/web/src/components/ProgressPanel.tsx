@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
+import { ErrorNotice } from "@/components/ErrorNotice";
 import { ProgressBar } from "@/components/ProgressBar";
 import { Sparkle } from "@/components/Sparkle";
 import { TopicStatusChip } from "@/components/StatusChip";
@@ -23,13 +24,28 @@ export function ProgressPanel({ subjectId, refreshKey }: Props) {
   const [progress, setProgress] = useState<SubjectProgress | null>(null);
   const [starting, setStarting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Si la carga falla se avisa (no se oculta el panel); `reloadKey` la vuelve a lanzar.
+  const [failed, setFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  function reload() {
+    setFailed(false);
+    setReloadKey((n) => n + 1);
+  }
 
   useEffect(() => {
     apiFetch<SubjectProgress>(`/subjects/${subjectId}/progress`)
       .then(setProgress)
-      .catch(() => setProgress(null));
-  }, [subjectId, refreshKey]);
+      .catch(() => setFailed(true));
+  }, [subjectId, refreshKey, reloadKey]);
 
+  if (failed) {
+    return (
+      <section id="progreso" className="scroll-mt-4">
+        <h2 className="mt-10 font-display text-xl font-semibold">Tu progreso</h2>
+        <ErrorNotice message="No pudimos cargar tu progreso." onRetry={reload} className="mt-3" />
+      </section>
+    );
+  }
   if (!progress || progress.topics.length === 0) return null;
 
   async function practice(topicId: string) {

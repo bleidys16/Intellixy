@@ -15,11 +15,17 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   // Con FormData el navegador fija solo el Content-Type (con el boundary); forzar JSON rompe la subida.
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
 
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    credentials: "include",
-    headers: { ...(isFormData ? {} : { "Content-Type": "application/json" }), ...options.headers },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      credentials: "include",
+      headers: { ...(isFormData ? {} : { "Content-Type": "application/json" }), ...options.headers },
+    });
+  } catch {
+    // Sin conexión o servidor caído: fetch lanza un TypeError sin nada útil para mostrar.
+    throw new ApiError("No pudimos conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.", 0, "NETWORK");
+  }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -30,4 +36,14 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
+}
+
+/** Texto para mostrar al usuario: el mensaje de la API si lo hay; si no, el de respaldo. */
+export function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof ApiError ? err.message : fallback;
+}
+
+/** true cuando el recurso no existe (o ya no): ahí sí conviene salir de la pantalla en vez de mostrar un error. */
+export function isNotFound(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 404;
 }

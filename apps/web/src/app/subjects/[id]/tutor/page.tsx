@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { TopNav } from "@/components/TopNav";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, ApiError, errorMessage, isNotFound } from "@/lib/api";
+import { ErrorNotice } from "@/components/ErrorNotice";
+import { ListSkeleton } from "@/components/Skeleton";
+import { FullPageStatus } from "@/components/FullPageStatus";
 import { useSession } from "@/lib/useSession";
 import type { TutorConversation } from "@/lib/types";
 
@@ -12,13 +15,20 @@ const MAX_LENGTH = 1000;
 
 export default function TutorHomePage() {
   const { id } = useParams<{ id: string }>();
-  const { user, loading } = useSession();
+  const { user, loading, error: sessionError, retry: retrySession } = useSession();
   const router = useRouter();
 
   const [conversations, setConversations] = useState<TutorConversation[] | null>(null);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Fallo al cargar (red, servidor): se muestra con "Reintentar". `reloadKey` vuelve a lanzar la carga.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  function reload() {
+    setLoadError(null);
+    setReloadKey((n) => n + 1);
+  }
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -32,13 +42,15 @@ export default function TutorHomePage() {
       .then((data) => {
         if (!cancelled) setConversations(data.conversations);
       })
-      .catch(() => {
-        if (!cancelled) router.push(`/subjects/${id}`);
+      .catch((err) => {
+        if (cancelled) return;
+        if (isNotFound(err)) router.push(`/subjects/${id}`);
+        else setLoadError(errorMessage(err, "No pudimos cargar tus conversaciones"));
       });
     return () => {
       cancelled = true;
     };
-  }, [user, id, router]);
+  }, [user, id, router, reloadKey]);
 
   async function start(e: React.FormEvent) {
     e.preventDefault();
@@ -69,7 +81,7 @@ export default function TutorHomePage() {
   }
 
   if (loading || !user) {
-    return <div className="flex flex-1 items-center justify-center text-ciruela/50">Cargando...</div>;
+    return <FullPageStatus error={sessionError} onRetry={retrySession} />;
   }
 
   return (
@@ -113,8 +125,12 @@ export default function TutorHomePage() {
         </form>
 
         <h2 className="mt-8 font-display text-lg font-semibold">Tus conversaciones</h2>
-        {conversations === null ? (
-          <p className="mt-3 text-ciruela/50">Cargando...</p>
+        {loadError ? (
+          <ErrorNotice message={loadError} onRetry={reload} className="mt-3" />
+        ) : conversations === null ? (
+          <div className="mt-3">
+            <ListSkeleton rows={2} />
+          </div>
         ) : conversations.length === 0 ? (
           <p className="mt-3 text-sm text-ciruela/55">Todavía no has preguntado nada. Empieza arriba.</p>
         ) : (

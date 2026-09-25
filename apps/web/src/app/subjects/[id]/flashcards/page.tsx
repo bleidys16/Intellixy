@@ -5,8 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TopNav } from "@/components/TopNav";
 import { ProgressBar } from "@/components/ProgressBar";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, ApiError, errorMessage, isNotFound } from "@/lib/api";
 import { formatDueIn } from "@/lib/relativeTime";
+import { FullPageStatus } from "@/components/FullPageStatus";
 import { useSession } from "@/lib/useSession";
 import type { Flashcard, FlashcardStats, ReviewResult } from "@/lib/types";
 
@@ -37,7 +38,7 @@ type Tally = Record<ReviewResult, number>;
 
 export default function FlashcardsStudyPage() {
   const { id } = useParams<{ id: string }>();
-  const { user, loading } = useSession();
+  const { user, loading, error: sessionError, retry: retrySession } = useSession();
   const router = useRouter();
 
   const [cards, setCards] = useState<Flashcard[] | null>(null);
@@ -46,6 +47,13 @@ export default function FlashcardsStudyPage() {
   const [revealed, setRevealed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Fallo al cargar (red, servidor): se muestra con "Reintentar". `reloadKey` vuelve a lanzar la carga.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  function reload() {
+    setLoadError(null);
+    setReloadKey((n) => n + 1);
+  }
   const [tally, setTally] = useState<Tally>({ sabia: 0, dude: 0, no_sabia: 0 });
   const [nextLabel, setNextLabel] = useState<string | null>(null);
 
@@ -76,13 +84,15 @@ export default function FlashcardsStudyPage() {
       .then((data) => {
         if (!cancelled) applyDue(data);
       })
-      .catch(() => {
-        if (!cancelled) router.push(`/subjects/${id}`);
+      .catch((err) => {
+        if (cancelled) return;
+        if (isNotFound(err)) router.push(`/subjects/${id}`);
+        else setLoadError(errorMessage(err, "No pudimos cargar tus tarjetas"));
       });
     return () => {
       cancelled = true;
     };
-  }, [user, id, dueUrl, applyDue, router]);
+  }, [user, id, dueUrl, applyDue, router, reloadKey]);
 
   // Al mostrar la respuesta el foco pasa a los botones de resultado.
   useEffect(() => {
@@ -117,7 +127,14 @@ export default function FlashcardsStudyPage() {
   }
 
   if (loading || !user || !cards) {
-    return <div className="flex flex-1 items-center justify-center text-ciruela/50">Cargando...</div>;
+    return (
+      <FullPageStatus
+        error={sessionError ?? loadError}
+        onRetry={sessionError ? retrySession : reload}
+        backHref={`/subjects/${id}`}
+        backLabel="Volver a la materia"
+      />
+    );
   }
 
   const back = (

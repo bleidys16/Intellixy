@@ -6,14 +6,18 @@ import { useEffect, useState } from "react";
 import { ProgressBar } from "@/components/ProgressBar";
 import { Sparkle } from "@/components/Sparkle";
 import { TopNav } from "@/components/TopNav";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, errorMessage } from "@/lib/api";
+import { EmptyState } from "@/components/EmptyState";
+import { ErrorNotice } from "@/components/ErrorNotice";
+import { SubjectCardSkeleton } from "@/components/Skeleton";
 import { formatAgo } from "@/lib/relativeTime";
 import { DEFAULT_SUBJECT_COLOR, SUBJECT_COLORS, subjectCardClass } from "@/lib/subjectColors";
+import { FullPageStatus } from "@/components/FullPageStatus";
 import { useSession } from "@/lib/useSession";
 import type { Subject } from "@/lib/types";
 
 export default function HomePage() {
-  const { user, loading } = useSession();
+  const { user, loading, error: sessionError, retry: retrySession } = useSession();
   const router = useRouter();
   // null = todavía cargando; distingue "cargando" de "no tienes materias".
   const [subjects, setSubjects] = useState<Subject[] | null>(null);
@@ -22,26 +26,41 @@ export default function HomePage() {
   const [name, setName] = useState("");
   const [color, setColor] = useState<string>(DEFAULT_SUBJECT_COLOR.hex);
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  // Fallo al cargar las materias; `reloadKey` vuelve a pedirlas.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
   }, [loading, user, router]);
 
   useEffect(() => {
-    if (user) {
-      apiFetch<{ subjects: Subject[] }>("/subjects")
-        .then((data) => {
-          setSubjects(data.subjects);
-          setNow(Date.now());
-        })
-        .catch(() => setSubjects([]));
-    }
-  }, [user]);
+    if (!user) return;
+    let cancelled = false;
+    apiFetch<{ subjects: Subject[] }>("/subjects")
+      .then((data) => {
+        if (cancelled) return;
+        setSubjects(data.subjects);
+        setNow(Date.now());
+      })
+      // Un fallo NO es "no tienes materias": se avisa y se deja reintentar.
+      .catch((err) => !cancelled && setLoadError(errorMessage(err, "No pudimos cargar tus materias")));
+    return () => {
+      cancelled = true;
+    };
+  }, [user, reloadKey]);
+
+  function reload() {
+    setLoadError(null);
+    setReloadKey((n) => n + 1);
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
     setCreating(true);
+    setCreateError(null);
     try {
       const { subject } = await apiFetch<{ subject: Subject }>("/subjects", {
         method: "POST",
@@ -49,13 +68,15 @@ export default function HomePage() {
       });
       setSubjects((prev) => [subject, ...(prev ?? [])]);
       setName("");
+    } catch (err) {
+      setCreateError(errorMessage(err, "No se pudo crear la materia. Inténtalo de nuevo."));
     } finally {
       setCreating(false);
     }
   }
 
   if (loading || !user) {
-    return <div className="flex flex-1 items-center justify-center text-ciruela/50">Cargando...</div>;
+    return <FullPageStatus error={sessionError} onRetry={retrySession} />;
   }
 
   // Aviso de hoy: total de tarjetas pendientes y la materia que más tiene, a donde lleva el botón.
@@ -133,16 +154,22 @@ export default function HomePage() {
             {creating ? "Creando..." : "Crear materia"}
           </button>
         </form>
+        {createError && <ErrorNotice message={createError} className="mt-3" />}
 
-        {subjects === null ? (
-          <p className="mt-10 text-center text-ciruela/50">Cargando tus materias...</p>
+        {loadError ? (
+          <ErrorNotice message={loadError} onRetry={reload} className="mt-8" />
+        ) : subjects === null ? (
+          <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3" aria-busy="true" aria-label="Cargando tus materias">
+            {[0, 1, 2].map((i) => (
+              <SubjectCardSkeleton key={i} />
+            ))}
+          </div>
         ) : subjects.length === 0 ? (
-          <div className="mt-10 rounded-2xl border border-dashed border-ciruela/20 px-6 py-10 text-center">
-            <p className="font-display text-xl font-semibold">Aquí vivirán tus materias</p>
-            <p className="mx-auto mt-2 max-w-sm text-sm text-ciruela/60">
-              Crea la primera arriba, sube tus apuntes y te preparamos quizzes, tarjetas y un tutor que responde con tu
-              propio material.
-            </p>
+          <div className="mt-10">
+            <EmptyState
+              title="Aquí vivirán tus materias"
+              description="Crea la primera arriba, sube tus apuntes y te preparamos quizzes, tarjetas y un tutor que responde con tu propio material."
+            />
           </div>
         ) : (
           <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">

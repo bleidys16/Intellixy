@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { ErrorNotice } from "@/components/ErrorNotice";
 import { formatDueIn } from "@/lib/relativeTime";
 import type { Flashcard, FlashcardStats } from "@/lib/types";
 
@@ -16,6 +17,13 @@ interface Props {
 export function FlashcardsPanel({ subjectId, refreshKey }: Props) {
   const [stats, setStats] = useState<FlashcardStats | null>(null);
   const [nextLabel, setNextLabel] = useState<string | null>(null);
+  // Si la carga falla se avisa (no se oculta el panel); `reloadKey` la vuelve a lanzar.
+  const [failed, setFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  function reload() {
+    setFailed(false);
+    setReloadKey((n) => n + 1);
+  }
 
   useEffect(() => {
     // limit=1: solo interesan los totales, no las tarjetas.
@@ -24,9 +32,17 @@ export function FlashcardsPanel({ subjectId, refreshKey }: Props) {
         setStats(data.stats);
         setNextLabel(data.stats.nextDueAt ? formatDueIn(data.stats.nextDueAt, Date.now()) : null);
       })
-      .catch(() => setStats(null));
-  }, [subjectId, refreshKey]);
+      .catch(() => setFailed(true));
+  }, [subjectId, refreshKey, reloadKey]);
 
+  if (failed) {
+    return (
+      <section id="tarjetas" className="scroll-mt-4">
+        <h2 className="mt-10 font-display text-xl font-semibold">Tarjetas de estudio</h2>
+        <ErrorNotice message="No pudimos cargar tus tarjetas." onRetry={reload} className="mt-3" />
+      </section>
+    );
+  }
   if (!stats || stats.total === 0) return null;
 
   const max = Math.max(...stats.byBox, 1);

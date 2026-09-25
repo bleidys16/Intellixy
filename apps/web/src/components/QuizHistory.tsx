@@ -3,18 +3,27 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { ErrorNotice } from "@/components/ErrorNotice";
 import type { QuizSummary } from "@/lib/types";
 
 /** Últimos intentos de la materia; los que quedaron a medias se pueden retomar. */
 export function QuizHistory({ subjectId }: { subjectId: string }) {
   const [attempts, setAttempts] = useState<QuizSummary[] | null>(null);
+  // Si la carga falla se avisa (no se oculta el panel); `reloadKey` la vuelve a lanzar.
+  const [failed, setFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  function reload() {
+    setFailed(false);
+    setReloadKey((n) => n + 1);
+  }
 
   useEffect(() => {
     apiFetch<{ attempts: QuizSummary[] }>(`/subjects/${subjectId}/quizzes`)
       .then((data) => setAttempts(data.attempts.slice(0, 5)))
-      .catch(() => setAttempts([]));
-  }, [subjectId]);
+      .catch(() => setFailed(true));
+  }, [subjectId, reloadKey]);
 
+  if (failed) return <ErrorNotice message="No pudimos cargar tus últimos intentos." onRetry={reload} className="mt-4" />;
   if (!attempts || attempts.length === 0) return null;
 
   return (

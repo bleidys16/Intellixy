@@ -11,7 +11,11 @@ import { QuestionGroups } from "@/components/QuestionGroups";
 import { QuizHistory } from "@/components/QuizHistory";
 import { QuizLauncher } from "@/components/QuizLauncher";
 import { TopNav } from "@/components/TopNav";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, ApiError, errorMessage, isNotFound } from "@/lib/api";
+import { EmptyState } from "@/components/EmptyState";
+import { ErrorNotice } from "@/components/ErrorNotice";
+import { ListSkeleton, Skeleton } from "@/components/Skeleton";
+import { FullPageStatus } from "@/components/FullPageStatus";
 import { useSession } from "@/lib/useSession";
 import type { GenerationJob, GenerationKind, Material, Question, Subject } from "@/lib/types";
 
@@ -19,7 +23,7 @@ const POLL_INTERVAL_MS = 2500;
 
 export default function SubjectPage() {
   const { id } = useParams<{ id: string }>();
-  const { user, loading } = useSession();
+  const { user, loading, error: sessionError, retry: retrySession } = useSession();
   const router = useRouter();
 
   const [subject, setSubject] = useState<Subject | null>(null);
@@ -30,6 +34,9 @@ export default function SubjectPage() {
   const [cardsRefresh, setCardsRefresh] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Fallo al cargar la materia (red, servidor): se muestra con "Reintentar". `reloadKey` vuelve a lanzar la carga.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   // Trabajos ya avisados: cada generación terminada se comunica una sola vez.
   const handledJobs = useRef(new Set<string>());
@@ -86,20 +93,35 @@ export default function SubjectPage() {
 
   useEffect(() => {
     if (!user) return;
+    let cancelled = false;
+    // Si la materia no existe se sale al inicio; cualquier otro fallo se muestra para poder reintentar.
+    const fail = (err: unknown) => {
+      if (cancelled) return;
+      if (isNotFound(err)) router.push("/");
+      else setLoadError(errorMessage(err, "No pudimos cargar la materia"));
+    };
     apiFetch<{ subject: Subject }>(`/subjects/${id}`)
-      .then((data) => setSubject(data.subject))
-      .catch(() => router.push("/"));
+      .then((data) => !cancelled && setSubject(data.subject))
+      .catch(fail);
     apiFetch<{ materials: Material[] }>(`/subjects/${id}/materials`)
-      .then((data) => setMaterials(data.materials))
-      .catch(() => {});
+      .then((data) => !cancelled && setMaterials(data.materials))
+      .catch(fail);
     apiFetch<{ questions: Question[] }>(`/subjects/${id}/questions`)
-      .then((data) => setQuestions(data.questions))
-      .catch(() => {});
+      .then((data) => !cancelled && setQuestions(data.questions))
+      .catch(fail);
     // Si se recargó la página mientras se generaba, se recupera el estado sin volver a avisar de lo ya terminado.
     apiFetch<{ jobs: GenerationJob[] }>(`/subjects/${id}/generations`)
-      .then((data) => syncJobs(data.jobs, false))
+      .then((data) => !cancelled && syncJobs(data.jobs, false))
       .catch(() => {});
-  }, [user, id, router, syncJobs]);
+    return () => {
+      cancelled = true;
+    };
+  }, [user, id, router, syncJobs, reloadKey]);
+
+  function reload() {
+    setLoadError(null);
+    setReloadKey((n) => n + 1);
+  }
 
   // Mientras algún material se esté leyendo, se consulta la lista cada pocos segundos.
   const hasPending = materials?.some((m) => m.status === "pendiente" || m.status === "procesando");
@@ -168,7 +190,7 @@ export default function SubjectPage() {
   }
 
   if (loading || !user) {
-    return <div className="flex flex-1 items-center justify-center text-ciruela/50">Cargando...</div>;
+    return <FullPageStatus error={sessionError} onRetry={retrySession} />;
   }
 
   return (
@@ -179,7 +201,12 @@ export default function SubjectPage() {
         <Link href="/" className="text-sm font-medium text-teal-deep hover:underline">
           ← Mis materias
         </Link>
-        <h1 className="mt-2 font-display text-3xl font-semibold">{subject?.name ?? "Materia"}</h1>
+        {subject ? (
+          <h1 className="mt-2 font-display text-3xl font-semibold">{subject.name}</h1>
+        ) : (
+          <Skeleton className="mt-3 h-9 w-2/3 sm:w-1/2" />
+        )}
+        {loadError && <ErrorNotice message={loadError} onRetry={reload} className="mt-4" />}
 
         <h2 className="mt-8 font-display text-xl font-semibold">Materiales</h2>
         <div className="mt-3">
@@ -187,11 +214,18 @@ export default function SubjectPage() {
         </div>
 
         {materials === null ? (
-          <p className="mt-4 text-ciruela/50">Cargando materiales...</p>
+          loadError ? null : (
+            <div className="mt-4">
+              <ListSkeleton rows={2} />
+            </div>
+          )
         ) : materials.length === 0 ? (
-          <p className="mt-4 text-ciruela/50">
-            Todavía no has añadido material. Sube un PDF, una foto de tus apuntes o pega un texto.
-          </p>
+          <div className="mt-4">
+            <EmptyState
+              title="Aún no hay material"
+              description="Sube un PDF, una foto de tus apuntes o pega un texto, y de ahí saldrán tus preguntas, tarjetas y el tutor."
+            />
+          </div>
         ) : (
           <ul className="mt-4 flex flex-col gap-3">
             {materials.map((material) => (

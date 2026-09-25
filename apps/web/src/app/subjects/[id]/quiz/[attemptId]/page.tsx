@@ -5,7 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { TopNav } from "@/components/TopNav";
 import { ProgressBar } from "@/components/ProgressBar";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, ApiError, errorMessage, isNotFound } from "@/lib/api";
+import { FullPageStatus } from "@/components/FullPageStatus";
 import { useSession } from "@/lib/useSession";
 import type { OptionLetter, QuizAnswerResponse, QuizAttempt, QuizItem, QuizResult } from "@/lib/types";
 
@@ -29,7 +30,7 @@ function Source({ item, result }: { item: QuizItem; result: QuizResult }) {
 
 export default function QuizPage() {
   const { id, attemptId } = useParams<{ id: string; attemptId: string }>();
-  const { user, loading } = useSession();
+  const { user, loading, error: sessionError, retry: retrySession } = useSession();
   const router = useRouter();
 
   const [attempt, setAttempt] = useState<QuizAttempt | null>(null);
@@ -38,6 +39,13 @@ export default function QuizPage() {
   const [showResults, setShowResults] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Fallo al cargar (red, servidor): se muestra con "Reintentar". `reloadKey` vuelve a lanzar la carga.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  function reload() {
+    setLoadError(null);
+    setReloadKey((n) => n + 1);
+  }
 
   const shownAt = useRef(0);
   const nextRef = useRef<HTMLButtonElement>(null);
@@ -62,13 +70,16 @@ export default function QuizPage() {
         if (first === -1) setShowResults(true);
         else setIndex(first);
       })
-      .catch(() => {
-        if (!cancelled) router.push(`/subjects/${id}`);
+      .catch((err) => {
+        if (cancelled) return;
+        // Si el intento no existe se vuelve a la materia; cualquier otro fallo se muestra para reintentar.
+        if (isNotFound(err)) router.push(`/subjects/${id}`);
+        else setLoadError(errorMessage(err, "No pudimos cargar el quiz"));
       });
     return () => {
       cancelled = true;
     };
-  }, [user, id, attemptId, router]);
+  }, [user, id, attemptId, router, reloadKey]);
 
   // El tiempo por pregunta se mide desde que aparece en pantalla.
   useEffect(() => {
@@ -111,7 +122,14 @@ export default function QuizPage() {
   }
 
   if (loading || !user || !items || !attempt) {
-    return <div className="flex flex-1 items-center justify-center text-ciruela/50">Cargando...</div>;
+    return (
+      <FullPageStatus
+        error={sessionError ?? loadError}
+        onRetry={sessionError ? retrySession : reload}
+        backHref={`/subjects/${id}`}
+        backLabel="Volver a la materia"
+      />
+    );
   }
 
   const back = (

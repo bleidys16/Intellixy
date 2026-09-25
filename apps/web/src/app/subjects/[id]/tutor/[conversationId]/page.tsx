@@ -5,7 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { TopNav } from "@/components/TopNav";
 import { TutorAnswer } from "@/components/TutorAnswer";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, ApiError, errorMessage, isNotFound } from "@/lib/api";
+import { FullPageStatus } from "@/components/FullPageStatus";
 import { useSession } from "@/lib/useSession";
 import type { TutorConversation, TutorMessage } from "@/lib/types";
 
@@ -14,7 +15,7 @@ const MAX_LENGTH = 1000;
 
 export default function TutorChatPage() {
   const { id, conversationId } = useParams<{ id: string; conversationId: string }>();
-  const { user, loading } = useSession();
+  const { user, loading, error: sessionError, retry: retrySession } = useSession();
   const router = useRouter();
 
   const [conversation, setConversation] = useState<TutorConversation | null>(null);
@@ -22,6 +23,13 @@ export default function TutorChatPage() {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Fallo al cargar (red, servidor): se muestra con "Reintentar". `reloadKey` vuelve a lanzar la carga.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  function reload() {
+    setLoadError(null);
+    setReloadKey((n) => n + 1);
+  }
   const bottomRef = useRef<HTMLLIElement>(null);
 
   const base = `/subjects/${id}/tutor/conversations/${conversationId}`;
@@ -40,13 +48,15 @@ export default function TutorChatPage() {
         setConversation(data.conversation);
         setMessages(data.messages);
       })
-      .catch(() => {
-        if (!cancelled) router.push(`/subjects/${id}/tutor`);
+      .catch((err) => {
+        if (cancelled) return;
+        if (isNotFound(err)) router.push(`/subjects/${id}/tutor`);
+        else setLoadError(errorMessage(err, "No pudimos cargar la conversación"));
       });
     return () => {
       cancelled = true;
     };
-  }, [user, base, id, router]);
+  }, [user, base, id, router, reloadKey]);
 
   // Mientras el tutor responde se consulta la conversación cada pocos segundos.
   const pending = messages?.some((m) => m.status === "pendiente" || m.status === "procesando") ?? false;
@@ -97,7 +107,14 @@ export default function TutorChatPage() {
   }
 
   if (loading || !user || !messages) {
-    return <div className="flex flex-1 items-center justify-center text-ciruela/50">Cargando...</div>;
+    return (
+      <FullPageStatus
+        error={sessionError ?? loadError}
+        onRetry={sessionError ? retrySession : reload}
+        backHref={`/subjects/${id}/tutor`}
+        backLabel="Volver al tutor"
+      />
+    );
   }
 
   const lastId = messages.at(-1)?.id;
