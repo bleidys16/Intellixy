@@ -14,6 +14,13 @@ export const MASTERED_FROM = 0.8;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** Un repaso de tarjeta vale como evidencia: lo sabía = acierto, dudé = a medias, no lo sabía = fallo. */
+export const REVIEW_SCORE = { sabia: 1, dude: 0.5, no_sabia: 0 } as const;
+
+export function reviewScore(result: string): number {
+  return REVIEW_SCORE[result as keyof typeof REVIEW_SCORE] ?? 0;
+}
+
 export type TopicStatus = "sin_datos" | "debil" | "en_progreso" | "dominado";
 
 /** Una respuesta o un repaso. `score` va de 0 (fallo) a 1 (acierto); las tarjetas dudosas valen a medias. */

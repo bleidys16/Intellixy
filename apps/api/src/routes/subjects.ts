@@ -5,6 +5,7 @@ import { requireAuth } from "../auth/middleware.js";
 import { db } from "../db/client.js";
 import { generationJobs, questions, subjects } from "../db/schema.js";
 import { ACTIVE_STATUSES, enqueueGeneration } from "../generation/enqueue.js";
+import { summarizeSubjects } from "../progress/summary.js";
 import { safe } from "./safe.js";
 
 export const subjectsRouter = Router();
@@ -42,13 +43,21 @@ subjectsRouter.post("/", async (req, res) => {
   res.status(201).json({ subject });
 });
 
-subjectsRouter.get("/", async (req, res) => {
-  const rows = await db.query.subjects.findMany({
-    where: eq(subjects.userId, req.userId!),
-    orderBy: (s, { desc }) => [desc(s.createdAt)],
-  });
-  res.json({ subjects: rows });
-});
+/** Cada materia lleva su resumen (materiales, dominio, tarjetas pendientes, último estudio) para las tarjetas del inicio. */
+subjectsRouter.get(
+  "/",
+  safe(async (req, res) => {
+    const rows = await db.query.subjects.findMany({
+      where: eq(subjects.userId, req.userId!),
+      orderBy: (s, { desc }) => [desc(s.createdAt)],
+    });
+    const summaries = await summarizeSubjects(
+      req.userId!,
+      rows.map((s) => s.id),
+    );
+    res.json({ subjects: rows.map((s) => ({ ...s, summary: summaries.get(s.id) })) });
+  }),
+);
 
 subjectsRouter.get("/:id", async (req, res) => {
   const subject = await db.query.subjects.findFirst({

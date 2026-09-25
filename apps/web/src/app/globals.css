@@ -17,6 +17,8 @@
   --color-card-purple: #f1d2f1;
   --color-card-lime: #f2f7cd;
   --color-card-turquoise: #c3efe4;
+  --color-card-yellow: #faedcd;
+  --color-card-rose: #fad2d1;
 }
 
 @theme inline {
@@ -37,6 +39,8 @@
   --color-card-purple: var(--color-card-purple);
   --color-card-lime: var(--color-card-lime);
   --color-card-turquoise: var(--color-card-turquoise);
+  --color-card-yellow: var(--color-card-yellow);
+  --color-card-rose: var(--color-card-rose);
 }
 
 body {

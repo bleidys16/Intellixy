@@ -14,3 +14,17 @@ export function formatDueIn(iso: string, nowMs: number): string {
   const days = Math.round(hours / 24);
   return `en ${days} ${days === 1 ? "día" : "días"}`;
 }
+
+/** "hoy", "ayer", "hace 3 días"... para cuándo fue lo último que estudió. Igual que arriba, recibe `nowMs`. */
+export function formatAgo(iso: string, nowMs: number): string {
+  const days = Math.floor((nowMs - new Date(iso).getTime()) / 86_400_000);
+  if (days < 1) return "hoy";
+  if (days === 1) return "ayer";
+  if (days < 7) return `hace ${days} días`;
+  if (days < 30) {
+    const weeks = Math.floor(days / 7);
+    return `hace ${weeks} ${weeks === 1 ? "semana" : "semanas"}`;
+  }
+  const months = Math.floor(days / 30);
+  return `hace ${months} ${months === 1 ? "mes" : "meses"}`;
+}

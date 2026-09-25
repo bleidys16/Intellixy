@@ -3,7 +3,7 @@ import { Router } from "express";
 import { requireAuth } from "../auth/middleware.js";
 import { db } from "../db/client.js";
 import { attemptAnswers, flashcardReviews, flashcards, questions, quizAttempts, topics } from "../db/schema.js";
-import { type Evidence, masteryOf, MIN_EVIDENCE, statusOf, type TopicStatus } from "../progress/mastery.js";
+import { type Evidence, masteryOf, MIN_EVIDENCE, reviewScore, statusOf, type TopicStatus } from "../progress/mastery.js";
 import { getOwnedSubject } from "./access.js";
 import { safe } from "./safe.js";
 
@@ -13,9 +13,6 @@ import { safe } from "./safe.js";
  */
 export const progressRouter = Router({ mergeParams: true });
 progressRouter.use(requireAuth);
-
-/** Un repaso de tarjeta vale como evidencia: lo sabía = acierto, dudé = a medias, no lo sabía = fallo. */
-const REVIEW_SCORE = { sabia: 1, dude: 0.5, no_sabia: 0 } as const;
 
 const MAX_RECOMMENDATIONS = 3;
 const WEAK_TOPICS_RECOMMENDED = 2;
@@ -93,7 +90,7 @@ progressRouter.get<SubjectParams>(
     for (const r of reviewRows) {
       const b = bucket(r.topicId);
       b.cards++;
-      b.evidence.push({ score: REVIEW_SCORE[r.result as keyof typeof REVIEW_SCORE] ?? 0, at: r.at });
+      b.evidence.push({ score: reviewScore(r.result), at: r.at });
     }
     const questionsByTopic = new Map(questionCounts.map((q) => [q.topicId, q.n]));
     const cardsByTopic = new Map<string, number>();

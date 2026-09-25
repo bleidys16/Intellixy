@@ -4,6 +4,17 @@ export interface User {
   email: string;
 }
 
+/** Lo que muestra la tarjeta de materia en el inicio. */
+export interface SubjectSummary {
+  materialCount: number;
+  /** Dominio general de 0 a 1; null mientras no haya respuestas suficientes para medirlo. */
+  mastery: number | null;
+  /** Tarjetas que ya toca repasar. */
+  dueCards: number;
+  /** Última vez que respondió o repasó algo; null si nunca. */
+  lastStudiedAt: string | null;
+}
+
 export interface Subject {
   id: string;
   userId: string;
@@ -11,6 +22,8 @@ export interface Subject {
   color: string | null;
   examDate: string | null;
   createdAt: string;
+  /** Solo viene en el listado; una materia recién creada aún no lo trae. */
+  summary?: SubjectSummary;
 }
 
 export interface Question {
