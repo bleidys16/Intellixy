@@ -193,3 +193,35 @@ export interface FlashcardStats {
   /** Cuándo vence la próxima que aún no toca; null si no queda ninguna. */
   nextDueAt: string | null;
 }
+
+export type TopicStatus = "sin_datos" | "debil" | "en_progreso" | "dominado";
+
+export interface TopicProgress {
+  id: string;
+  name: string;
+  /** De 0 a 1; null mientras no haya respuestas suficientes para medirlo. */
+  mastery: number | null;
+  status: TopicStatus;
+  evidenceCount: number;
+  quizAnswers: number;
+  cardReviews: number;
+  questionCount: number;
+  cardCount: number;
+  lastActivityAt: string | null;
+}
+
+export type Recommendation =
+  | { type: "tarjetas_vencidas"; message: string; count: number }
+  | { type: "tema_debil"; message: string; topicId: string; topicName: string; mastery: number; questionCount: number }
+  | { type: "mas_datos"; message: string; topicId: string; topicName: string; missing: number; questionCount: number }
+  | { type: "al_dia"; message: string };
+
+export interface SubjectProgress {
+  overall: { mastery: number | null; evidenceCount: number };
+  topics: TopicProgress[];
+  quizzes: { finished: number; averagePercent: number | null; lastPercent: number | null };
+  flashcards: { total: number; due: number };
+  recommendations: Recommendation[];
+  /** Respuestas mínimas para mostrar el dominio de un tema. */
+  minEvidence: number;
+}

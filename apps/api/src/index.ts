@@ -5,6 +5,7 @@ import express from "express";
 import { authRouter } from "./routes/auth.js";
 import { flashcardsRouter } from "./routes/flashcards.js";
 import { materialsRouter } from "./routes/materials.js";
+import { progressRouter } from "./routes/progress.js";
 import { quizzesRouter } from "./routes/quizzes.js";
 import { tutorRouter } from "./routes/tutor.js";
 import { subjectsRouter } from "./routes/subjects.js";
@@ -29,6 +30,7 @@ app.use("/subjects/:subjectId/materials", materialsRouter);
 app.use("/subjects/:subjectId/quizzes", quizzesRouter);
 app.use("/subjects/:subjectId/flashcards", flashcardsRouter);
 app.use("/subjects/:subjectId/tutor", tutorRouter);
+app.use("/subjects/:subjectId/progress", progressRouter);
 
 app.listen(port, () => {
   console.log(`API listening on http://localhost:${port}`);

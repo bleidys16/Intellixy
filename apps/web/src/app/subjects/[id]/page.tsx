@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { MaterialCard } from "@/components/MaterialCard";
 import { MaterialUploader } from "@/components/MaterialUploader";
 import { FlashcardsPanel } from "@/components/FlashcardsPanel";
+import { ProgressPanel } from "@/components/ProgressPanel";
 import { QuestionGroups } from "@/components/QuestionGroups";
 import { QuizHistory } from "@/components/QuizHistory";
 import { QuizLauncher } from "@/components/QuizLauncher";
@@ -233,6 +234,8 @@ export default function SubjectPage() {
         )}
 
         <FlashcardsPanel subjectId={id} refreshKey={cardsRefresh} />
+
+        <ProgressPanel subjectId={id} refreshKey={cardsRefresh + questions.length} />
 
         {materials?.some((m) => m.status === "listo") && (
           <section id="tutor" className="scroll-mt-4">
