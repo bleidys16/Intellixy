@@ -1,12 +1,12 @@
 import sharp from "sharp";
-import { nvidiaChat } from "../ai/nvidia.js";
+import { groqChat } from "../ai/groq.js";
 import type { MaterialBlock } from "../ai/types.js";
 import { hasReadableText } from "./detectText.js";
 import { ExtractionError } from "./errors.js";
 
 /**
  * Tope de la imagen en base64 dentro de la petición. El límite de ~180.000 caracteres de
- * NVIDIA aplica al formato <img> en línea; con `image_url` (el que usamos) se probó bien
+ * Groq al formato <img> en línea; con `image_url` (el que usamos) se probó bien
  * hasta ~440.000, así que 400.000 deja margen. Más resolución ayuda con letra a mano.
  */
 const MAX_BASE64_CHARS = 400_000;
@@ -79,7 +79,7 @@ export async function extractImage(data: Buffer): Promise<MaterialBlock[]> {
     throw new ExtractionError("No se encontró texto legible en la imagen");
   }
 
-  const model = process.env.NVIDIA_VISION_MODEL ?? "meta/llama-3.2-11b-vision-instruct";
+  const model = process.env.GROQ_VISION_MODEL ?? "qwen/qwen3.8-27b";
   const body = {
     model,
     temperature: 0,
@@ -103,7 +103,7 @@ export async function extractImage(data: Buffer): Promise<MaterialBlock[]> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
-      const res = await nvidiaChat(body);
+      const res = await groqChat(body);
       const raw = String(res?.choices?.[0]?.message?.content ?? "");
       const text = parseOcrResponse(raw);
       if (text === null) {

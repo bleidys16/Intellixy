@@ -1,4 +1,4 @@
-import { getNvidiaApiKey, nvidiaChat } from "./nvidia.js";
+import { getGroqApiKey, groqChat } from "./groq.js";
 
 /** Saca el objeto JSON de la respuesta del modelo, que a veces lo envuelve en ``` o añade texto. */
 export function extractJson(raw: string): unknown {
@@ -29,8 +29,8 @@ export async function chatJson<T>(input: {
   maxTokens: number;
   validate: (parsed: unknown) => T;
 }): Promise<T> {
-  getNvidiaApiKey();
-  const model = process.env.NVIDIA_MODEL ?? "meta/llama-3.2-11b-vision-instruct";
+  getGroqApiKey();
+  const model = process.env.GROQ_MODEL ?? "qwen/qwen3.8-27b";
 
   const body = {
     model,
@@ -47,7 +47,7 @@ export async function chatJson<T>(input: {
   let lastError: unknown;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
-      const data = await nvidiaChat(body);
+      const data = await groqChat(body);
       const raw = data?.choices?.[0]?.message?.content ?? "";
       return input.validate(extractJson(raw));
     } catch (err) {
