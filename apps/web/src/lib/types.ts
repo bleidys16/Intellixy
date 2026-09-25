@@ -184,6 +184,8 @@ export interface TutorMessage {
   outcome: TutorOutcome | null;
   /** Conocimiento general del modelo: no viene de los apuntes y no está verificado. */
   general: string | null;
+  /** Resumen de internet con las páginas de donde salió; no viene de los apuntes. */
+  web: { answer: string; sources: Array<{ title: string; url: string }> } | null;
   citations: TutorCitation[];
   errorMessage: string | null;
   createdAt: string;

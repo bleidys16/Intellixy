@@ -27,13 +27,42 @@ function General({ text, partial }: { text: string; partial: boolean }) {
   );
 }
 
+/** Lo que se encontró en internet: siempre aparte de los apuntes, con enlaces a las páginas reales. */
+function Web({ web, partial }: { web: NonNullable<TutorMessage["web"]>; partial: boolean }) {
+  return (
+    <div className="mt-3 rounded-xl border border-soft-blue/60 bg-card-blue/40 px-3 py-2.5 text-sm">
+      <p className="text-xs font-semibold uppercase tracking-wide text-ciruela/60">
+        {partial ? "Además, en internet" : "Lo que encontré en internet"}
+      </p>
+      <p className="mt-1 whitespace-pre-wrap text-ciruela/85">{web.answer}</p>
+      <ul className="mt-2 flex flex-col gap-1">
+        {web.sources.map((s) => (
+          <li key={s.url} className="min-w-0 text-xs">
+            <a
+              href={s.url}
+              target="_blank"
+              rel="noopener noreferrer nofollow"
+              className="block truncate font-medium text-teal-deep underline-offset-2 hover:underline"
+            >
+              {s.title}
+            </a>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-xs text-ciruela/55">
+        Esto no viene de tus apuntes: es un resumen de internet. Compruébalo antes de estudiarlo.
+      </p>
+    </div>
+  );
+}
+
 /** Una respuesta del tutor: respaldada con fuentes, "no aparece en tus apuntes", o sin verificar. */
 export function TutorAnswer({ message, onRetry }: { message: TutorMessage; onRetry?: () => void }) {
   if (message.status === "pendiente" || message.status === "procesando") {
     return (
       <p role="status" className="flex items-center gap-2 text-sm text-ciruela/60">
         <span aria-hidden className="h-3 w-3 animate-spin rounded-full border-2 border-ciruela/30 border-t-ciruela" />
-        El tutor está buscando en tus apuntes…
+        El tutor está buscando en tus apuntes y en internet…
       </p>
     );
   }
@@ -78,6 +107,7 @@ export function TutorAnswer({ message, onRetry }: { message: TutorMessage; onRet
             ))}
           </ol>
         </div>
+        {message.web && <Web web={message.web} partial />}
         {message.general && <General text={message.general} partial />}
       </div>
     );
@@ -91,9 +121,10 @@ export function TutorAnswer({ message, onRetry }: { message: TutorMessage; onRet
           ? "No pude respaldar esta respuesta con tus apuntes, así que no te la muestro."
           : "Esto no aparece en tus apuntes."}
       </p>
+      {message.web && <Web web={message.web} partial={false} />}
       {message.general ? (
         <General text={message.general} partial={false} />
-      ) : (
+      ) : message.web ? null : (
         <p className="mt-2 text-sm text-ciruela/65">
           Tampoco tengo una respuesta general fiable. Prueba a subir material sobre este tema.
         </p>

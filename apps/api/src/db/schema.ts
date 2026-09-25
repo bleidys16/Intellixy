@@ -311,6 +311,12 @@ export interface TutorCitation {
   materialType: string;
 }
 
+/** Resumen de internet que acompaña a una respuesta del tutor, con las páginas reales de donde salió. */
+export interface TutorWeb {
+  answer: string;
+  sources: Array<{ title: string; url: string }>;
+}
+
 /**
  * Mensajes de la conversación. Las preguntas del estudiante (role "user") nacen "listo". Las respuestas
  * (role "assistant") nacen "pendiente" y un worker las completa; son la cola del tutor, igual que
@@ -333,6 +339,8 @@ export const tutorMessages = pgTable(
     outcome: text("outcome"),
     general: text("general"),
     citations: jsonb("citations").notNull().$type<TutorCitation[]>().default([]),
+    /** Lo que se encontró en internet (no viene de los apuntes); null si la búsqueda no se hizo o no dio nada. */
+    web: jsonb("web").$type<TutorWeb>(),
     errorMessage: text("error_message"),
     /** Evento de cuota reservado al preguntar; se reembolsa si la respuesta falla. Sin FK: el reembolso lo borra. */
     usageEventId: uuid("usage_event_id"),

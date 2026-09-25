@@ -42,6 +42,7 @@ function publicMessage(m: Message) {
     status: m.status,
     outcome: m.outcome,
     general: m.general,
+    web: m.web,
     citations: m.citations,
     errorMessage: m.errorMessage,
     createdAt: m.createdAt,

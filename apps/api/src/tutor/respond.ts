@@ -1,7 +1,8 @@
 import { and, asc, eq, lt } from "drizzle-orm";
 import { askTutor, type HistoryTurn } from "../ai/tutorAnswer.js";
+import { searchWeb } from "../ai/webSearch.js";
 import { db } from "../db/client.js";
-import { materialChunks, materials, tutorMessages, type TutorCitation } from "../db/schema.js";
+import { materialChunks, materials, tutorMessages, type TutorCitation, type TutorWeb } from "../db/schema.js";
 import { normalize } from "../questions/generateForMaterial.js";
 import { selectContext, type ContextBlock } from "./retrieval.js";
 
@@ -16,13 +17,16 @@ export interface TutorReply {
   content: string;
   outcome: TutorOutcome;
   general: string | null;
+  /** Resumen de internet con sus fuentes; va aparte de la respuesta de los apuntes. */
+  web: TutorWeb | null;
   citations: TutorCitation[];
 }
 
 /** Lo que el modelo "recuerda" de una respuesta anterior. */
 function replyForHistory(m: typeof tutorMessages.$inferSelect): string {
   if (m.outcome === "grounded") return m.content;
-  return `Eso no aparece en tus apuntes.${m.general ? ` ${m.general}` : ""}`;
+  const extra = m.web?.answer ?? m.general;
+  return `Eso no aparece en tus apuntes.${extra ? ` ${extra}` : ""}`;
 }
 
 /**
@@ -84,7 +88,8 @@ export function verifyCitations(
  * Genera la respuesta del tutor a la última pregunta de la conversación. Regla del plan, "sin fuente no hay
  * respuesta": el texto de `content` solo se muestra si al menos una cita se verificó en el material. Si el tema
  * no está en los apuntes, se dice claramente; el conocimiento general del modelo se ofrece aparte (`general`),
- * marcado como no verificado y sin fuentes inventadas.
+ * marcado como no verificado y sin fuentes inventadas. En paralelo se busca la pregunta en internet (`web`): va
+ * siempre aparte, con las páginas reales de las que salió, y si falla el tutor responde igual con los apuntes.
  */
 export async function respondToMessage(assistantMessageId: string): Promise<TutorReply> {
   const assistant = await db.query.tutorMessages.findFirst({
@@ -138,17 +143,22 @@ export async function respondToMessage(assistantMessageId: string): Promise<Tuto
   const blocks = selectContext(chunks, query);
 
   const t0 = Date.now();
-  const model = await askTutor({ blocks, history, question: last.content });
+  const [model, web] = await Promise.all([
+    askTutor({ blocks, history, question: last.content }),
+    searchWeb({ question: last.content, recentQuestions: recent.map((e) => e.question) }),
+  ]);
+  // Con resultados de internet el "conocimiento general" del modelo sobra: se muestra lo que sí tiene fuentes.
+  const general = web ? null : model.general;
   const verified = verifyCitations(model.answer, model.citations, blocks);
   console.log(
     `[tutor] ${Date.now() - t0} ms, ${blocks.length} bloques, inMaterial=${model.inMaterial}, ` +
-      `citas ${verified.citations.length}/${model.citations.length}`,
+      `citas ${verified.citations.length}/${model.citations.length}, web=${web ? web.sources.length + " fuentes" : "no"}`,
   );
 
   if (model.inMaterial && verified.citations.length > 0 && verified.answer) {
-    return { content: verified.answer, outcome: "grounded", general: model.general, citations: verified.citations };
+    return { content: verified.answer, outcome: "grounded", general, web, citations: verified.citations };
   }
   // El modelo dijo que sí estaba en el material pero no se pudo comprobar: no se muestra su texto.
   const outcome: TutorOutcome = model.inMaterial ? "unverified" : "not_in_material";
-  return { content: "", outcome, general: model.general, citations: [] };
+  return { content: "", outcome, general, web, citations: [] };
 }

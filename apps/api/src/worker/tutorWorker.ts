@@ -94,6 +94,7 @@ async function processMessage(message: Message) {
         content: reply.content,
         outcome: reply.outcome,
         general: reply.general,
+        web: reply.web,
         citations: reply.citations,
         updatedAt: new Date(),
       })
