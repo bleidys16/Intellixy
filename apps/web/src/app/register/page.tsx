@@ -13,11 +13,13 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setErrorCode(null);
     setLoading(true);
     try {
       await apiFetch("/auth/register", {
@@ -28,6 +30,7 @@ export default function RegisterPage() {
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Algo salió mal, inténtalo de nuevo");
+      setErrorCode(err instanceof ApiError ? err.code ?? null : null);
     } finally {
       setLoading(false);
     }
@@ -73,7 +76,16 @@ export default function RegisterPage() {
         />
         <p className="mt-1 text-xs text-ciruela/50">Mínimo 8 caracteres</p>
 
-        {error && <p className="mt-4 text-sm text-wine">{error}</p>}
+        {error && (
+          <div className="mt-4 text-sm text-wine">
+            <p>{error}</p>
+            {errorCode === "EMAIL_EXISTS" && (
+              <Link href="/login" className="mt-1 block font-medium text-teal-deep hover:underline">
+                Ir a iniciar sesión →
+              </Link>
+            )}
+          </div>
+        )}
 
         <button
           type="submit"

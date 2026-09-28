@@ -33,7 +33,7 @@ authRouter.post("/register", async (req, res) => {
 
   const existing = await db.query.users.findFirst({ where: eq(users.email, email) });
   if (existing) {
-    res.status(409).json({ error: "Ya existe una cuenta con ese email" });
+    res.status(409).json({ error: "Ya existe una cuenta con ese email. ¿Quieres iniciar sesión?", code: "EMAIL_EXISTS" });
     return;
   }
 
@@ -63,7 +63,7 @@ authRouter.post("/login", async (req, res) => {
 
   const user = await db.query.users.findFirst({ where: eq(users.email, email) });
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
-    res.status(401).json({ error: "Email o contraseña incorrectos" });
+    res.status(401).json({ error: "El email o la contraseña no coinciden. Revisa tus datos e inténtalo de nuevo.", code: "INVALID_CREDENTIALS" });
     return;
   }
 

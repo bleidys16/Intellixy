@@ -52,7 +52,14 @@ export default function LoginPage() {
 
         <PasswordInput label="Contraseña" value={password} onChange={setPassword} autoComplete="current-password" />
 
-        {error && <p className="mt-4 text-sm text-wine">{error}</p>}
+        {error && (
+          <div className="mt-4 text-sm text-wine">
+            <p>{error}</p>
+            <Link href="/register" className="mt-1 block font-medium text-teal-deep hover:underline">
+              ¿No tienes cuenta? Crea una →
+            </Link>
+          </div>
+        )}
 
         <button
           type="submit"
