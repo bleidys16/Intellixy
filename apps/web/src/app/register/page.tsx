@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Logo } from "@/components/Logo";
 import { PasswordInput } from "@/components/PasswordInput";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, ApiError, setToken } from "@/lib/api";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -22,10 +22,11 @@ export default function RegisterPage() {
     setErrorCode(null);
     setLoading(true);
     try {
-      await apiFetch("/auth/register", {
+      const data = await apiFetch<{ token?: string }>("/auth/register", {
         method: "POST",
         body: JSON.stringify({ name, email, password }),
       });
+      if (data.token) setToken(data.token);
       router.push("/");
       router.refresh();
     } catch (err) {

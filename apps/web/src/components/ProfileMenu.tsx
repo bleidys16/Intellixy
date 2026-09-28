@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, clearToken } from "@/lib/api";
 import type { User } from "@/lib/types";
 
 /** Avatar con inicial del nombre; al abrirlo muestra nombre, email y cerrar sesión. */
@@ -28,7 +28,8 @@ export function ProfileMenu({ user }: { user: User }) {
   }, [open]);
 
   async function handleLogout() {
-    await apiFetch("/auth/logout", { method: "POST" });
+    await apiFetch("/auth/logout", { method: "POST" }).catch(() => {});
+    clearToken();
     router.push("/login");
     router.refresh();
   }

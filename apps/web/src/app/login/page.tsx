@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Logo } from "@/components/Logo";
 import { PasswordInput } from "@/components/PasswordInput";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, ApiError, setToken } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,7 +19,8 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      await apiFetch("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+      const data = await apiFetch<{ token?: string }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+      if (data.token) setToken(data.token);
       router.push("/");
       router.refresh();
     } catch (err) {
