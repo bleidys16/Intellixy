@@ -1,4 +1,8 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+// Sin NEXT_PUBLIC_API_URL, se deduce del host con el que se abrió la página (localhost, 127.0.0.1
+// o la IP de red local) para que la app funcione igual desde un celular en la misma red.
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ??
+  (typeof window !== "undefined" ? `http://${window.location.hostname}:4000` : "http://localhost:4000");
 
 export class ApiError extends Error {
   constructor(

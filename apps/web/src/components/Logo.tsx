@@ -7,10 +7,10 @@ import Image from "next/image";
 export function Logo({ className = "h-7" }: { className?: string }) {
   return (
     <Image
-      src="/brand/intellixy-logo.svg"
+      src="/brand/intellixy-wordmark.svg"
       alt="Intellixy"
-      width={1539}
-      height={408}
+      width={2648}
+      height={827}
       unoptimized
       priority
       className={`w-auto ${className}`}

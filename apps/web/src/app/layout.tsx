@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, Manrope } from "next/font/google";
+import { SplashScreen } from "@/components/SplashScreen";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -22,6 +23,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="es" className={`${manrope.variable} ${bricolage.variable} h-full antialiased`}>
       {/* Algunas extensiones (p. ej. ColorZilla) añaden atributos al body antes de hidratar. */}
       <body className="min-h-full flex flex-col bg-oat text-ciruela" suppressHydrationWarning>
+        <SplashScreen />
         {children}
       </body>
     </html>
