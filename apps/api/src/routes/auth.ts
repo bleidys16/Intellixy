@@ -9,10 +9,11 @@ import { users } from "../db/schema.js";
 
 export const authRouter = Router();
 
+const isProduction = process.env.NODE_ENV === "production";
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  sameSite: "lax" as const,
-  secure: process.env.NODE_ENV === "production",
+  sameSite: (isProduction ? "none" : "lax") as "none" | "lax",
+  secure: isProduction,
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 
