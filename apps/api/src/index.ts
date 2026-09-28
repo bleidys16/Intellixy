@@ -20,12 +20,16 @@ const port = process.env.PORT ?? 4000;
 // en el puerto 3000 (rangos privados 192.168.x, 10.x, 172.16-31.x), para poder probar desde
 // el celular en la misma WiFi sin tener que tocar variables de entorno.
 const LAN_ORIGIN = /^http:\/\/(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}):3000$/;
-const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:3000";
+const webOrigins = (process.env.WEB_ORIGIN ?? "http://localhost:3000").split(",");
 app.use(
   cors({
     origin(origin, callback) {
       if (!origin) return callback(null, true);
-      callback(null, origin === webOrigin || LAN_ORIGIN.test(origin));
+      
+      // Permitir cualquier origen de Vercel (útil para los previews)
+      const isVercel = origin.endsWith(".vercel.app");
+      
+      callback(null, webOrigins.includes(origin) || LAN_ORIGIN.test(origin) || isVercel);
     },
     credentials: true,
   }),
