@@ -11,7 +11,9 @@ declare global {
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const token = req.cookies?.[AUTH_COOKIE];
+  const authHeader = req.headers.authorization;
+  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+  const token = bearerToken || req.cookies?.[AUTH_COOKIE];
   if (!token) {
     res.status(401).json({ error: "No autenticado" });
     return;

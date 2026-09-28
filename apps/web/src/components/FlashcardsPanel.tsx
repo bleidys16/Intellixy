@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { apiFetch } from "@/lib/api";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { formatDueIn } from "@/lib/relativeTime";
@@ -11,10 +12,12 @@ interface Props {
   subjectId: string;
   /** Cambia cuando termina una generación de tarjetas, para volver a pedir los totales. */
   refreshKey: number;
+  /** Qué mostrar si la materia aún no tiene tarjetas. Sin esto, no se muestra nada. */
+  emptyFallback?: ReactNode;
 }
 
-/** Estado de las tarjetas de la materia y acceso al repaso de hoy. No se muestra si no hay tarjetas. */
-export function FlashcardsPanel({ subjectId, refreshKey }: Props) {
+/** Estado de las tarjetas de la materia y acceso al repaso de hoy. */
+export function FlashcardsPanel({ subjectId, refreshKey, emptyFallback }: Props) {
   const [stats, setStats] = useState<FlashcardStats | null>(null);
   const [nextLabel, setNextLabel] = useState<string | null>(null);
   // Si la carga falla se avisa (no se oculta el panel); `reloadKey` la vuelve a lanzar.
@@ -37,19 +40,19 @@ export function FlashcardsPanel({ subjectId, refreshKey }: Props) {
 
   if (failed) {
     return (
-      <section id="tarjetas" className="scroll-mt-4">
-        <h2 className="mt-10 font-display text-xl font-semibold">Tarjetas de estudio</h2>
+      <section>
+        <h2 className="font-display text-xl font-semibold">Tarjetas de estudio</h2>
         <ErrorNotice message="No pudimos cargar tus tarjetas." onRetry={reload} className="mt-3" />
       </section>
     );
   }
-  if (!stats || stats.total === 0) return null;
+  if (!stats || stats.total === 0) return <>{emptyFallback ?? null}</>;
 
   const max = Math.max(...stats.byBox, 1);
 
   return (
-    <section id="tarjetas" className="scroll-mt-4">
-      <h2 className="mt-10 font-display text-xl font-semibold">Tarjetas de estudio ({stats.total})</h2>
+    <section>
+      <h2 className="font-display text-xl font-semibold">Tarjetas de estudio ({stats.total})</h2>
       <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm sm:p-5">
         {stats.due > 0 ? (
           <>

@@ -10,7 +10,10 @@ import { ProgressPanel } from "@/components/ProgressPanel";
 import { QuestionGroups } from "@/components/QuestionGroups";
 import { QuizHistory } from "@/components/QuizHistory";
 import { QuizLauncher } from "@/components/QuizLauncher";
+import { SubjectNav } from "@/components/SubjectNav";
+import type { SubjectTabId } from "@/components/SubjectNav";
 import { TopNav } from "@/components/TopNav";
+import { TutorChat } from "@/components/TutorChat";
 import { apiFetch, ApiError, errorMessage, isNotFound } from "@/lib/api";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";
@@ -20,6 +23,8 @@ import { useSession } from "@/lib/useSession";
 import type { GenerationJob, GenerationKind, Material, Question, Subject } from "@/lib/types";
 
 const POLL_INTERVAL_MS = 2500;
+
+const TAB_IDS: SubjectTabId[] = ["materiales", "practicar", "tarjetas", "progreso", "tutor"];
 
 export default function SubjectPage() {
   const { id } = useParams<{ id: string }>();
@@ -37,6 +42,20 @@ export default function SubjectPage() {
   // Fallo al cargar la materia (red, servidor): se muestra con "Reintentar". `reloadKey` vuelve a lanzar la carga.
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [activeTab, setActiveTab] = useState<SubjectTabId>("materiales");
+
+  // Si se llega con #practicar (p. ej. al volver de un quiz), se abre esa pestaña.
+  useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    if (!TAB_IDS.includes(hash as SubjectTabId)) return;
+    const timer = setTimeout(() => setActiveTab(hash as SubjectTabId), 0);
+    return () => clearTimeout(timer);
+  }, []);
+
+  function selectTab(tab: SubjectTabId) {
+    setActiveTab(tab);
+    window.history.replaceState(null, "", `#${tab}`);
+  }
 
   // Trabajos ya avisados: cada generación terminada se comunica una sola vez.
   const handledJobs = useRef(new Set<string>());
@@ -196,8 +215,9 @@ export default function SubjectPage() {
   return (
     <div className="flex flex-1 flex-col">
       <TopNav user={user} />
+      <SubjectNav active={activeTab} onSelect={selectTab} />
 
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:px-10 sm:py-8">
+      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 pb-28 sm:px-10 sm:py-8 lg:pb-8">
         <Link href="/" className="text-sm font-medium text-teal-deep hover:underline">
           ← Mis materias
         </Link>
@@ -208,97 +228,116 @@ export default function SubjectPage() {
         )}
         {loadError && <ErrorNotice message={loadError} onRetry={reload} className="mt-4" />}
 
-        <h2 className="mt-8 font-display text-xl font-semibold">Materiales</h2>
-        <div className="mt-3">
+        {(notice || error) && (
+          <div className="mt-4">
+            {notice && (
+              <p role="status" className="rounded-xl bg-yuzu/50 px-4 py-3 text-sm">
+                {notice}
+              </p>
+            )}
+            {error && (
+              <p role="alert" className="mt-2 rounded-xl bg-wine/10 px-4 py-3 text-sm text-wine">
+                {error}
+              </p>
+            )}
+          </div>
+        )}
+
+        <div id="panel-materiales" role="tabpanel" aria-labelledby="tab-materiales" hidden={activeTab !== "materiales"} className="mt-5">
           <MaterialUploader subjectId={id} onCreated={handleCreated} />
+
+          {materials === null ? (
+            loadError ? null : (
+              <div className="mt-4">
+                <ListSkeleton rows={2} />
+              </div>
+            )
+          ) : materials.length === 0 ? (
+            <div className="mt-4">
+              <EmptyState
+                title="Aún no hay material"
+                description="Sube un PDF, una foto de tus apuntes o pega un texto, y de ahí saldrán tus preguntas, tarjetas y el tutor."
+              />
+            </div>
+          ) : (
+            <ul className="mt-4 flex flex-col gap-3">
+              {materials.map((material) => (
+                <MaterialCard
+                  key={material.id}
+                  material={material}
+                  subjectId={id}
+                  generation={
+                    jobs.find(
+                      (j) => j.materialId === material.id && (j.status === "pendiente" || j.status === "procesando"),
+                    ) ?? null
+                  }
+                  onGenerate={handleGenerate}
+                  onRetry={handleRetry}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </ul>
+          )}
         </div>
 
-        {materials === null ? (
-          loadError ? null : (
-            <div className="mt-4">
-              <ListSkeleton rows={2} />
-            </div>
-          )
-        ) : materials.length === 0 ? (
-          <div className="mt-4">
+        <div id="panel-practicar" role="tabpanel" aria-labelledby="tab-practicar" hidden={activeTab !== "practicar"} className="mt-5">
+          {questions.length === 0 ? (
             <EmptyState
-              title="Aún no hay material"
-              description="Sube un PDF, una foto de tus apuntes o pega un texto, y de ahí saldrán tus preguntas, tarjetas y el tutor."
+              title="Aún no hay preguntas"
+              description="Ve a Materiales y genera preguntas de un material listo para poder practicar."
             />
-          </div>
-        ) : (
-          <ul className="mt-4 flex flex-col gap-3">
-            {materials.map((material) => (
-              <MaterialCard
-                key={material.id}
-                material={material}
-                subjectId={id}
-                generation={
-                  jobs.find(
-                    (j) => j.materialId === material.id && (j.status === "pendiente" || j.status === "procesando"),
-                  ) ?? null
-                }
-                onGenerate={handleGenerate}
-                onRetry={handleRetry}
-                onDelete={handleDelete}
-              />
-            ))}
-          </ul>
-        )}
-
-        {notice && (
-          <p role="status" className="mt-4 rounded-xl bg-yuzu/50 px-4 py-3 text-sm">
-            {notice}
-          </p>
-        )}
-        {error && (
-          <p role="alert" className="mt-4 rounded-xl bg-wine/10 px-4 py-3 text-sm text-wine">
-            {error}
-          </p>
-        )}
-
-        {questions.length > 0 && (
-          <section id="practicar" className="scroll-mt-4">
-            <h2 className="mt-10 font-display text-xl font-semibold">Practicar</h2>
-            <div className="mt-3">
+          ) : (
+            <>
               <QuizLauncher subjectId={id} questions={questions} />
-            </div>
-            <QuizHistory subjectId={id} />
-          </section>
-        )}
+              <QuizHistory subjectId={id} />
+              <h2 className="mt-10 font-display text-xl font-semibold">Preguntas generadas ({questions.length})</h2>
+              <QuestionGroups questions={questions} />
+            </>
+          )}
+        </div>
 
-        <FlashcardsPanel subjectId={id} refreshKey={cardsRefresh} />
+        <div id="panel-tarjetas" role="tabpanel" aria-labelledby="tab-tarjetas" hidden={activeTab !== "tarjetas"} className="mt-5">
+          <FlashcardsPanel
+            subjectId={id}
+            refreshKey={cardsRefresh}
+            emptyFallback={
+              <EmptyState
+                title="Aún no hay tarjetas"
+                description="Ve a Materiales y genera tarjetas de un material listo para empezar a repasar."
+              />
+            }
+          />
+        </div>
 
-        <ProgressPanel subjectId={id} refreshKey={cardsRefresh + questions.length} />
+        <div id="panel-progreso" role="tabpanel" aria-labelledby="tab-progreso" hidden={activeTab !== "progreso"} className="mt-5">
+          <ProgressPanel
+            subjectId={id}
+            refreshKey={cardsRefresh + questions.length}
+            emptyFallback={
+              <EmptyState
+                title="Todavía no hay progreso que mostrar"
+                description="Responde preguntas o repasa tarjetas y aquí verás tu dominio por tema."
+              />
+            }
+          />
+        </div>
 
-        {materials?.some((m) => m.status === "listo") && (
-          <section id="tutor" className="scroll-mt-4">
-            <h2 className="mt-10 font-display text-xl font-semibold">Tutor</h2>
-            <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm sm:p-5">
-              <p className="text-sm text-ciruela/70">
-                Pregúntale lo que no entiendas. Responde con tus apuntes y te muestra de dónde sacó cada dato.
-              </p>
-              <Link
-                href={`/subjects/${id}/tutor`}
-                className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-full bg-turquesa px-5 text-sm font-semibold text-ciruela transition-opacity hover:opacity-90 sm:w-auto"
-              >
-                Preguntarle al tutor
-              </Link>
-            </div>
-          </section>
-        )}
-
-        <h2 className="mt-10 font-display text-xl font-semibold">
-          Preguntas generadas {questions.length > 0 && `(${questions.length})`}
-        </h2>
-
-        {questions.length === 0 ? (
-          <p className="mt-3 text-ciruela/50">
-            Todavía no has generado preguntas. Cuando un material esté listo, pulsa «Generar preguntas».
-          </p>
-        ) : (
-          <QuestionGroups questions={questions} />
-        )}
+        <div id="panel-tutor" role="tabpanel" aria-labelledby="tab-tutor" hidden={activeTab !== "tutor"} className="mt-5">
+          {materials === null ? (
+            loadError ? null : (
+              <div className="mt-4">
+                <ListSkeleton rows={2} />
+              </div>
+            )
+          ) : materials.some((m) => m.status === "listo") ? (
+            <TutorChat subjectId={id} />
+          ) : (
+            <EmptyState
+              title="El tutor todavía no está listo"
+              description="Sube un material y espera a que termine de procesarse para poder preguntarle."
+            />
+          )}
+        </div>
       </main>
     </div>
   );

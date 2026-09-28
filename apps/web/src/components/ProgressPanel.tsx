@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { ProgressBar } from "@/components/ProgressBar";
@@ -14,12 +15,14 @@ interface Props {
   subjectId: string;
   /** Cambia cuando llegan preguntas o tarjetas nuevas, para volver a pedir el progreso. */
   refreshKey: number;
+  /** Qué mostrar si la materia aún no tiene progreso que medir. Sin esto, no se muestra nada. */
+  emptyFallback?: ReactNode;
 }
 
 const percent = (mastery: number) => Math.round(mastery * 100);
 
-/** Dominio por tema, temas débiles y qué repasar primero. No se muestra si la materia aún no tiene qué practicar. */
-export function ProgressPanel({ subjectId, refreshKey }: Props) {
+/** Dominio por tema, temas débiles y qué repasar primero. */
+export function ProgressPanel({ subjectId, refreshKey, emptyFallback }: Props) {
   const router = useRouter();
   const [progress, setProgress] = useState<SubjectProgress | null>(null);
   const [starting, setStarting] = useState<string | null>(null);
@@ -40,13 +43,13 @@ export function ProgressPanel({ subjectId, refreshKey }: Props) {
 
   if (failed) {
     return (
-      <section id="progreso" className="scroll-mt-4">
-        <h2 className="mt-10 font-display text-xl font-semibold">Tu progreso</h2>
+      <section>
+        <h2 className="font-display text-xl font-semibold">Tu progreso</h2>
         <ErrorNotice message="No pudimos cargar tu progreso." onRetry={reload} className="mt-3" />
       </section>
     );
   }
-  if (!progress || progress.topics.length === 0) return null;
+  if (!progress || progress.topics.length === 0) return <>{emptyFallback ?? null}</>;
 
   async function practice(topicId: string) {
     setStarting(topicId);
@@ -86,8 +89,8 @@ export function ProgressPanel({ subjectId, refreshKey }: Props) {
   }
 
   return (
-    <section id="progreso" className="scroll-mt-4">
-      <h2 className="mt-10 font-display text-xl font-semibold">Tu progreso</h2>
+    <section>
+      <h2 className="font-display text-xl font-semibold">Tu progreso</h2>
       <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm sm:p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <p className="text-sm text-ciruela/70">Dominio general</p>
