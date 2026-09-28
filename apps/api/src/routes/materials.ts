@@ -121,7 +121,7 @@ materialsRouter.post<{ subjectId: string }>("/upload", async (req, res) => {
     try {
       await parseUpload(req, res, limits.maxFileBytes);
     } catch (err) {
-      if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+      if (err instanceof multer.MulterError && (err as { code?: string }).code === "LIMIT_FILE_SIZE") {
         limitReached(
           res,
           "maxFileBytes",
