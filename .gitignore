@@ -24,3 +24,6 @@ apps/api/.cache/
 
 .vercel
 .env*
+
+# APKs generados para compartir
+releases/
