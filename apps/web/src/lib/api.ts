@@ -1,8 +1,6 @@
-// Sin NEXT_PUBLIC_API_URL, se deduce del host con el que se abrió la página (localhost, 127.0.0.1
-// o la IP de red local) para que la app funcione igual desde un celular en la misma red.
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ??
-  (typeof window !== "undefined" ? `http://${window.location.hostname}:4000` : "http://localhost:4000");
+// La API vive en el mismo proyecto/origen que la web (Route Handlers bajo /api), así que no
+// hace falta deducir host ni puerto — ni CORS, ni cold start de un servidor aparte.
+const API_URL = "/api";
 
 export class ApiError extends Error {
   constructor(
@@ -41,7 +39,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     ...(isFormData ? {} : { "Content-Type": "application/json" }),
   };
 
-  // Adjuntar token Bearer si existe (para auth cross-domain)
+  // Adjuntar token Bearer si existe (también sirve para la app empaquetada en Android)
   const token = getToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
 

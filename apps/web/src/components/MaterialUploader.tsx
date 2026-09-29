@@ -1,7 +1,8 @@
 "use client";
 
+import { upload } from "@vercel/blob/client";
 import { useRef, useState } from "react";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, ApiError, getToken } from "@/lib/api";
 import type { Material } from "@/lib/types";
 
 type Mode = "file" | "text";
@@ -29,12 +30,20 @@ export function MaterialUploader({ subjectId, onCreated }: Props) {
     const failures: string[] = [];
     // De a uno: así el orden de la lista es el de la selección y un error no frena el resto.
     for (const file of files) {
-      const form = new FormData();
-      form.append("file", file);
       try {
+        // Paso 1: el navegador sube el archivo directo a Vercel Blob (las funciones serverless
+        // cortan el cuerpo de la petición en 4.5MB, muy poco para un PDF o una foto de apuntes).
+        const ext = file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : "";
+        const token = getToken();
+        const blob = await upload(`${subjectId}/${crypto.randomUUID()}${ext}`, file, {
+          access: "private",
+          handleUploadUrl: `/api/subjects/${subjectId}/materials/upload`,
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        // Paso 2: ya en Blob, se valida de verdad (tipo por bytes, cuotas) y se crea el material.
         const { material } = await apiFetch<{ material: Material }>(
-          `/subjects/${subjectId}/materials/upload`,
-          { method: "POST", body: form },
+          `/subjects/${subjectId}/materials/finalize`,
+          { method: "POST", body: JSON.stringify({ pathname: blob.pathname, name: file.name }) },
         );
         onCreated(material);
       } catch (err) {
