@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { ErrorNotice } from "@/components/ErrorNotice";
 
 /**
@@ -16,6 +17,15 @@ export function FullPageStatus({
   backHref?: string;
   backLabel?: string;
 }) {
+  // El backend gratuito se duerme tras un rato inactivo y tarda unos segundos en despertar;
+  // sin este aviso, esa espera se ve igual que una app colgada.
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (error) return;
+    const t = setTimeout(() => setSlow(true), 4000);
+    return () => clearTimeout(t);
+  }, [error]);
+
   if (error) {
     return (
       <div className="flex flex-1 items-center justify-center px-4">
@@ -31,9 +41,12 @@ export function FullPageStatus({
     );
   }
   return (
-    <div role="status" className="flex flex-1 items-center justify-center gap-2 text-ciruela/50">
-      <span aria-hidden className="h-4 w-4 animate-spin rounded-full border-2 border-ciruela/20 border-t-ciruela/60" />
-      Cargando...
+    <div role="status" className="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center text-ciruela/50">
+      <span className="flex items-center gap-2">
+        <span aria-hidden className="h-4 w-4 animate-spin rounded-full border-2 border-ciruela/20 border-t-ciruela/60" />
+        Cargando...
+      </span>
+      {slow && <span className="text-sm">Despertando el servidor, puede tardar unos segundos…</span>}
     </div>
   );
 }

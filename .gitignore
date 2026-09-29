@@ -21,3 +21,6 @@ apps/api/uploads/
 
 # datos de idioma descargados por tesseract.js
 apps/api/.cache/
+
+.vercel
+.env*

@@ -1,0 +1,10 @@
+{
+  "appId": "com.intellixy.app",
+  "appName": "Intellixy",
+  "webDir": "public",
+  "androidScheme": "https",
+  "server": {
+    "url": "https://intellixy-web.vercel.app",
+    "cleartext": false
+  }
+}
