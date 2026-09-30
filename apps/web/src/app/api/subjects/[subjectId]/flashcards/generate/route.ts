@@ -12,8 +12,10 @@ const generateSchema = z.object({
 
 /**
  * Encola la generación de tarjetas de un material "listo" (202 con el trabajo). Comparte cuota con las preguntas.
- * TODO (fase 6 del plan de migración): disparar el procesamiento real.
+ * El procesamiento corre en segundo plano (waitUntil dentro de enqueueGeneration).
  */
+export const maxDuration = 300;
+
 export const POST = withRoute(async (request: NextRequest, { params }: { params: Promise<{ subjectId: string }> }) => {
   const userId = requireAuth(request);
   const { subjectId } = await params;

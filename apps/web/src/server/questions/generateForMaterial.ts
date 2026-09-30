@@ -9,7 +9,8 @@ import { upsertTopics } from "./topics";
  * Tope de texto que se envía al modelo (~15.000 tokens). El RAG con embeddings queda fuera
  * del MVP, así que un material largo no se manda entero: se toman páginas repartidas.
  */
-const MAX_INPUT_CHARS = 60_000;
+/** El plan gratuito de Groq limita ~7000 tokens de entrada por minuto: el texto se acota para no superarlo. */
+const MAX_INPUT_CHARS = Number(process.env.GENERATION_MAX_INPUT_CHARS ?? 12_000);
 
 export type Chunk = typeof materialChunks.$inferSelect;
 

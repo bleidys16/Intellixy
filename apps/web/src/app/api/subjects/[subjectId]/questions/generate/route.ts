@@ -13,10 +13,10 @@ const generateSchema = z.object({
 /**
  * Encola la generación de preguntas de un material ya "listo" y responde 202 con el trabajo.
  * Gasta una generación de la cuota diaria; si el modelo falla, el job queda en "error".
- *
- * TODO (fase 6 del plan de migración): disparar el procesamiento real (waitUntil + endpoint
- * interno) — hasta entonces el job se queda "pendiente" sin nada que lo procese.
+ * El procesamiento corre en segundo plano (waitUntil dentro de enqueueGeneration).
  */
+export const maxDuration = 300;
+
 export const POST = withRoute(async (request: NextRequest, { params }: { params: Promise<{ subjectId: string }> }) => {
   const userId = requireAuth(request);
   const { subjectId } = await params;
