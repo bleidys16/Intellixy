@@ -1,12 +1,15 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { waitUntil } from "@vercel/functions";
+import { and, eq, inArray, lt } from "drizzle-orm";
 import { db } from "../db/client";
 import { generationJobs, materials, users } from "../db/schema";
 import { getLimits, limitReachedBody, type PlanLimits } from "../limits";
 import { countUsageLastDay, recordUsage, refundUsage } from "../usage";
+import { processGenerationJob } from "./process";
 
 export type GenerationKind = "preguntas" | "tarjetas";
 
 export const ACTIVE_STATUSES = ["pendiente", "procesando"];
+const STALE_JOB_MS = 6 * 60 * 1000;
 
 const KINDS: Record<
   GenerationKind,
@@ -73,6 +76,23 @@ export async function enqueueGeneration(input: {
     );
   }
 
+  // Un trabajo que lleva demasiado sin avanzar se cortó (función terminada, reinicio): se cierra
+  // con error y se devuelve la cuota para que no bloquee el material para siempre.
+  const stale = await db
+    .update(generationJobs)
+    .set({ status: "error", errorMessage: "La generación se interrumpió. Inténtalo de nuevo", updatedAt: new Date() })
+    .where(
+      and(
+        eq(generationJobs.materialId, material.id),
+        inArray(generationJobs.status, ACTIVE_STATUSES),
+        lt(generationJobs.updatedAt, new Date(Date.now() - STALE_JOB_MS)),
+      ),
+    )
+    .returning({ usageEventId: generationJobs.usageEventId });
+  for (const s of stale) {
+    if (s.usageEventId) await refundUsage(s.usageEventId).catch(() => {});
+  }
+
   // Un solo trabajo activo por material: evita el doble clic y cuota gastada dos veces.
   const active = await db.query.generationJobs.findFirst({
     where: and(eq(generationJobs.materialId, material.id), inArray(generationJobs.status, ACTIVE_STATUSES)),
@@ -96,6 +116,7 @@ export async function enqueueGeneration(input: {
         usageEventId,
       })
       .returning();
+    waitUntil(processGenerationJob(job.id));
     return { status: 202, body: { job } };
   } catch (err) {
     await refundUsage(usageEventId).catch(() => {});
