@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { BackLink } from "@/components/BackLink";
 import { TopNav } from "@/components/TopNav";
 import { ProgressBar } from "@/components/ProgressBar";
 import { apiFetch, ApiError, errorMessage, isNotFound } from "@/lib/api";
@@ -132,11 +133,7 @@ export default function QuizPage() {
     );
   }
 
-  const back = (
-    <Link href={`/subjects/${id}`} className="text-sm font-medium text-teal-deep hover:underline">
-      ← Volver a la materia
-    </Link>
-  );
+  const back = <BackLink href={`/subjects/${id}`}>Volver a la materia</BackLink>;
 
   if (items.length === 0) {
     return (
@@ -164,9 +161,7 @@ export default function QuizPage() {
       <TopNav user={user} />
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:px-10 sm:py-8">
         <div className="flex items-center justify-between gap-3">
-          <Link href={`/subjects/${id}`} className="text-sm font-medium text-teal-deep hover:underline">
-            ← Salir
-          </Link>
+          <BackLink href={`/subjects/${id}`}>Salir</BackLink>
           <span className="text-sm text-ciruela/60">
             Pregunta {index + 1} de {items.length}
           </span>
@@ -282,9 +277,7 @@ function Results({
     <div className="flex flex-1 flex-col">
       <TopNav user={user} />
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:px-10 sm:py-8">
-        <Link href={`/subjects/${subjectId}`} className="text-sm font-medium text-teal-deep hover:underline">
-          ← Volver a la materia
-        </Link>
+        <BackLink href={`/subjects/${subjectId}`}>Volver a la materia</BackLink>
 
         <section className="mt-4 rounded-2xl bg-white p-5 text-center shadow-sm sm:p-8">
           <p className="font-display text-xl font-semibold">{title}</p>

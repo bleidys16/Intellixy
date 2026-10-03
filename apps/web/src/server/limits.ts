@@ -32,10 +32,10 @@ const MB = 1024 * 1024;
 
 export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
   free: {
-    maxFileBytes: 10 * MB,
+    maxFileBytes: 50 * MB,
     maxPdfPages: 50,
     maxMaterialsPerSubject: 10,
-    maxStorageBytes: 100 * MB,
+    maxStorageBytes: 250 * MB,
     aiGenerationsPerDay: 5,
     maxQuestionsPerGeneration: 10,
     maxFlashcardsPerGeneration: 15,

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
 import { MaterialStatusChip } from "@/components/StatusChip";
+import { CircularProgressLoader } from "@/components/CircularProgressLoader";
 import type { GenerationJob, GenerationKind, Material, MaterialChunk } from "@/lib/types";
 
 interface Props {
@@ -141,16 +142,14 @@ export function MaterialCard({
             <p className="mt-2 text-sm text-wine">{material.errorMessage}</p>
           )}
           {inProgress && (
-            <p className="mt-2 text-sm text-ciruela/60">
-              Estamos leyendo tu archivo. Puedes seguir usando la app; esto se actualiza solo.
+            <p role="status" className="mt-2 flex items-center gap-2 text-sm text-ciruela/60">
+              <CircularProgressLoader className="h-4 w-4" />
+              <span>Estamos leyendo tu archivo. Puedes seguir usando la app; esto se actualiza solo.</span>
             </p>
           )}
           {generation && (
             <p role="status" className="mt-2 flex items-center gap-2 text-sm text-ciruela/60">
-              <span
-                aria-hidden
-                className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-ciruela/30 border-t-ciruela"
-              />
+              <CircularProgressLoader className="h-4 w-4" />
               <span>
                 {generation.status === "pendiente"
                   ? `Tus ${generation.kind} están en cola.`
@@ -211,9 +210,11 @@ export function MaterialCard({
                     : "Generando..."
                   : "Generar tarjetas"}
               </button>
-              <button onClick={() => void toggleText()} className={secondaryButton}>
-                {open ? "Ocultar texto" : "Ver texto extraído"}
-              </button>
+              {material.type !== "text" && (
+                <button onClick={() => void toggleText()} className={secondaryButton}>
+                  {open ? "Ocultar texto" : "Ver texto extraído"}
+                </button>
+              )}
             </>
           )}
           {material.status === "error" && (

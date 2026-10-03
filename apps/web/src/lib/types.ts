@@ -22,6 +22,7 @@ export interface Subject {
   name: string;
   color: string | null;
   examDate: string | null;
+  position: number;
   createdAt: string;
   /** Solo viene en el listado; una materia recién creada aún no lo trae. */
   summary?: SubjectSummary;

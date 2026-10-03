@@ -1,10 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { BackLink } from "@/components/BackLink";
 import { MaterialCard } from "@/components/MaterialCard";
 import { MaterialUploader } from "@/components/MaterialUploader";
+import { CircularProgressLoader } from "@/components/CircularProgressLoader";
 import { FlashcardsPanel } from "@/components/FlashcardsPanel";
 import { ProgressPanel } from "@/components/ProgressPanel";
 import { QuestionGroups } from "@/components/QuestionGroups";
@@ -38,6 +39,10 @@ export default function SubjectPage() {
   // Sube cuando termina una generación de tarjetas, para que el panel de tarjetas vuelva a pedir sus totales.
   const [cardsRefresh, setCardsRefresh] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
+  // Distingue el aviso "generando..." (lleva spinner) del aviso de resultado final.
+  const [noticeLoading, setNoticeLoading] = useState(false);
+  // Pestaña a la que lleva el botón del aviso de resultado ("Ir a practicar" / "Ir a tarjetas"); null mientras genera.
+  const [noticeTab, setNoticeTab] = useState<SubjectTabId | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Fallo al cargar la materia (red, servidor): se muestra con "Reintentar". `reloadKey` vuelve a lanzar la carga.
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -84,6 +89,8 @@ export default function SubjectPage() {
 
         if (job.status === "error") {
           setNotice(null);
+          setNoticeLoading(false);
+          setNoticeTab(null);
           setError(job.errorMessage ?? `No se pudieron generar las ${job.kind}`);
           continue;
         }
@@ -103,6 +110,8 @@ export default function SubjectPage() {
         }
         setError(null);
         setNotice(parts.join(" "));
+        setNoticeLoading(false);
+        setNoticeTab(job.kind === "tarjetas" ? "tarjetas" : "practicar");
         if (job.kind === "tarjetas") setCardsRefresh((n) => n + 1);
         else void refreshQuestions().catch(() => {});
       }
@@ -173,6 +182,7 @@ export default function SubjectPage() {
   async function handleGenerate(material: Material, kind: GenerationKind) {
     setError(null);
     setNotice(null);
+    setNoticeTab(null);
     const endpoint = kind === "tarjetas" ? "flashcards" : "questions";
     try {
       const { job } = await apiFetch<{ job: GenerationJob }>(`/subjects/${id}/${endpoint}/generate`, {
@@ -183,6 +193,7 @@ export default function SubjectPage() {
       setNotice(
         `Estamos generando las ${kind} de «${material.name}». Puedes seguir usando la app; te avisamos cuando estén listas.`,
       );
+      setNoticeLoading(true);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         // Ya había una generación en curso para este material: se muestra esa.
@@ -218,9 +229,7 @@ export default function SubjectPage() {
       <SubjectNav active={activeTab} onSelect={selectTab} />
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 pb-28 sm:px-10 sm:py-8 lg:pb-8">
-        <Link href="/" className="text-sm font-medium text-teal-deep hover:underline">
-          ← Mis materias
-        </Link>
+        <BackLink href="/">Mis materias</BackLink>
         {subject ? (
           <h1 className="mt-2 font-display text-3xl font-semibold">{subject.name}</h1>
         ) : (
@@ -231,9 +240,21 @@ export default function SubjectPage() {
         {(notice || error) && (
           <div className="mt-4">
             {notice && (
-              <p role="status" className="rounded-xl bg-yuzu/50 px-4 py-3 text-sm">
-                {notice}
-              </p>
+              <div role="status" className="rounded-xl bg-yuzu/50 px-4 py-3 text-sm">
+                <p className="flex items-center gap-2">
+                  {noticeLoading && <CircularProgressLoader className="h-4 w-4" />}
+                  <span>{notice}</span>
+                </p>
+                {noticeTab && (
+                  <button
+                    type="button"
+                    onClick={() => selectTab(noticeTab)}
+                    className="mt-2 rounded-full bg-ciruela px-3.5 py-1.5 text-sm font-medium text-oat transition-opacity hover:opacity-90"
+                  >
+                    {noticeTab === "tarjetas" ? "Ir a tarjetas" : "Ir a practicar"}
+                  </button>
+                )}
+              </div>
             )}
             {error && (
               <p role="alert" className="mt-2 rounded-xl bg-wine/10 px-4 py-3 text-sm text-wine">

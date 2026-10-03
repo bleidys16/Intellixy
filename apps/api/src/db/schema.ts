@@ -29,6 +29,8 @@ export const subjects = pgTable("subjects", {
   name: text("name").notNull(),
   color: text("color"),
   examDate: timestamp("exam_date"),
+  /** Orden de la lista del usuario: mayor va primero. Nueva materia = max actual + 1. */
+  position: integer("position").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { BackLink } from "@/components/BackLink";
 import { TopNav } from "@/components/TopNav";
 import { ProgressBar } from "@/components/ProgressBar";
 import { apiFetch, ApiError, errorMessage, isNotFound } from "@/lib/api";
@@ -137,11 +137,7 @@ export default function FlashcardsStudyPage() {
     );
   }
 
-  const back = (
-    <Link href={`/subjects/${id}`} className="text-sm font-medium text-teal-deep hover:underline">
-      ← Volver a la materia
-    </Link>
-  );
+  const back = <BackLink href={`/subjects/${id}`}>Volver a la materia</BackLink>;
   const shell = (children: React.ReactNode) => (
     <div className="flex flex-1 flex-col">
       <TopNav user={user} />
@@ -222,9 +218,7 @@ export default function FlashcardsStudyPage() {
   return shell(
     <>
       <div className="flex items-center justify-between gap-3">
-        <Link href={`/subjects/${id}`} className="text-sm font-medium text-teal-deep hover:underline">
-          ← Salir
-        </Link>
+        <BackLink href={`/subjects/${id}`}>Salir</BackLink>
         <span className="text-sm text-ciruela/60">
           Tarjeta {index + 1} de {cards.length}
         </span>

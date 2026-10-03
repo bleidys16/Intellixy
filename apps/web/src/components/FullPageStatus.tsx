@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { useEffect, useState } from "react";
+import { BackLink } from "@/components/BackLink";
 import { ErrorNotice } from "@/components/ErrorNotice";
 
 /**
@@ -32,9 +32,9 @@ export function FullPageStatus({
         <div className="w-full max-w-md">
           <ErrorNotice message={error} onRetry={onRetry} />
           {backHref && (
-            <Link href={backHref} className="mt-4 inline-block text-sm font-medium text-teal-deep hover:underline">
-              ← {backLabel}
-            </Link>
+            <div className="mt-4">
+              <BackLink href={backHref}>{backLabel}</BackLink>
+            </div>
           )}
         </div>
       </div>

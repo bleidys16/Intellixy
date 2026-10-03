@@ -2,16 +2,18 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ProgressBar } from "@/components/ProgressBar";
 import { Sparkle } from "@/components/Sparkle";
+import { CreateSubjectTile } from "@/components/CreateSubjectTile";
+import { SubjectCardMenu } from "@/components/SubjectCardMenu";
 import { TopNav } from "@/components/TopNav";
 import { apiFetch, errorMessage } from "@/lib/api";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { SubjectCardSkeleton } from "@/components/Skeleton";
 import { formatAgo } from "@/lib/relativeTime";
-import { DEFAULT_SUBJECT_COLOR, SUBJECT_COLORS, subjectCardClass } from "@/lib/subjectColors";
+import { subjectCardClass } from "@/lib/subjectColors";
 import { FullPageStatus } from "@/components/FullPageStatus";
 import { useSession } from "@/lib/useSession";
 import type { Subject } from "@/lib/types";
@@ -23,10 +25,6 @@ export default function HomePage() {
   const [subjects, setSubjects] = useState<Subject[] | null>(null);
   // Hora en que llegó el listado, para "hace 2 días" sin leer el reloj durante el render.
   const [now, setNow] = useState(0);
-  const [name, setName] = useState("");
-  const [color, setColor] = useState<string>(DEFAULT_SUBJECT_COLOR.hex);
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
   // Fallo al cargar las materias; `reloadKey` vuelve a pedirlas.
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -56,23 +54,67 @@ export default function HomePage() {
     setReloadKey((n) => n + 1);
   }
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) return;
-    setCreating(true);
-    setCreateError(null);
+  function handleSubjectCreated(subject: Subject) {
+    setSubjects((prev) => [subject, ...(prev ?? [])]);
+  }
+
+  function handleSubjectUpdated(updated: Subject) {
+    setSubjects((prev) => prev?.map((s) => (s.id === updated.id ? { ...s, ...updated } : s)) ?? prev);
+  }
+
+  function handleSubjectDeleted(subjectId: string) {
+    setSubjects((prev) => prev?.filter((s) => s.id !== subjectId) ?? prev);
+  }
+
+  /** Guarda el orden en el servidor; si falla, vuelve a pedir la lista para no quedar desincronizado. */
+  async function persistOrder(list: Subject[]) {
     try {
-      const { subject } = await apiFetch<{ subject: Subject }>("/subjects", {
+      await apiFetch("/subjects/reorder", {
         method: "POST",
-        body: JSON.stringify({ name, color }),
+        body: JSON.stringify({ orderedIds: list.map((s) => s.id) }),
       });
-      setSubjects((prev) => [subject, ...(prev ?? [])]);
-      setName("");
-    } catch (err) {
-      setCreateError(errorMessage(err, "No se pudo crear la materia. Inténtalo de nuevo."));
-    } finally {
-      setCreating(false);
+    } catch {
+      reload();
     }
+  }
+
+  function moveBy(subjectId: string, delta: number) {
+    setSubjects((prev) => {
+      if (!prev) return prev;
+      const index = prev.findIndex((s) => s.id === subjectId);
+      const target = index + delta;
+      if (index === -1 || target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(index, 1);
+      next.splice(target, 0, moved);
+      void persistOrder(next);
+      return next;
+    });
+  }
+
+  // Arrastrar y soltar (solo mouse, así que en la práctica es cosa de escritorio): el id que se
+  // está arrastrando vive en un ref porque cambia muchas veces por segundo durante el gesto y no
+  // necesita volver a renderizar nada hasta soltar.
+  const draggedId = useRef<string | null>(null);
+
+  function handleDragOver(overId: string) {
+    if (!draggedId.current || draggedId.current === overId) return;
+    const fromId = draggedId.current;
+    setSubjects((prev) => {
+      if (!prev) return prev;
+      const from = prev.findIndex((s) => s.id === fromId);
+      const to = prev.findIndex((s) => s.id === overId);
+      if (from === -1 || to === -1) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }
+
+  function handleDragEnd() {
+    draggedId.current = null;
+    if (subjects) void persistOrder(subjects);
   }
 
   if (loading || !user) {
@@ -114,48 +156,6 @@ export default function HomePage() {
           </Link>
         )}
 
-        <form
-          onSubmit={handleCreate}
-          className="mt-6 flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-sm sm:flex-row sm:items-end"
-        >
-          <label className="flex-1 text-sm font-medium">
-            Nueva materia
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="ej. Biología celular"
-              className="mt-1 w-full rounded-lg border border-ciruela/15 px-3 py-2 outline-none focus:border-turquesa"
-            />
-          </label>
-          <div className="flex items-center gap-1" role="group" aria-label="Color de la materia">
-            {SUBJECT_COLORS.map((c) => (
-              <button
-                type="button"
-                key={c.hex}
-                onClick={() => setColor(c.hex)}
-                aria-label={c.name}
-                aria-pressed={color === c.hex}
-                className="flex h-11 w-11 items-center justify-center rounded-full"
-              >
-                <span
-                  className={`block h-8 w-8 rounded-full border border-ciruela/15 ${
-                    color === c.hex ? "outline-2 outline-offset-2 outline-ciruela" : ""
-                  }`}
-                  style={{ backgroundColor: c.hex }}
-                />
-              </button>
-            ))}
-          </div>
-          <button
-            type="submit"
-            disabled={creating}
-            className="rounded-full bg-ciruela px-5 py-2.5 font-medium text-oat transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
-            {creating ? "Creando..." : "Crear materia"}
-          </button>
-        </form>
-        {createError && <ErrorNotice message={createError} className="mt-3" />}
-
         {loadError ? (
           <ErrorNotice message={loadError} onRetry={reload} className="mt-8" />
         ) : subjects === null ? (
@@ -164,26 +164,71 @@ export default function HomePage() {
               <SubjectCardSkeleton key={i} />
             ))}
           </div>
-        ) : subjects.length === 0 ? (
-          <div className="mt-10">
-            <EmptyState
-              title="Aquí vivirán tus materias"
-              description="Crea la primera arriba, sube tus apuntes y te preparamos quizzes, tarjetas y un tutor que responde con tu propio material."
-            />
-          </div>
         ) : (
-          <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
-            {subjects.map((subject) => (
-              <SubjectCard key={subject.id} subject={subject} now={now} />
-            ))}
-          </div>
+          <>
+            {subjects.length === 0 && (
+              <div className="mt-10">
+                <EmptyState
+                  title="Aquí vivirán tus materias"
+                  description="Crea la primera abajo, sube tus apuntes y te preparamos quizzes, tarjetas y un tutor que responde con tu propio material."
+                />
+              </div>
+            )}
+            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
+              <CreateSubjectTile onCreated={handleSubjectCreated} />
+              {subjects.map((subject, index) => (
+                <SubjectCard
+                  key={subject.id}
+                  subject={subject}
+                  now={now}
+                  isFirst={index === 0}
+                  isLast={index === subjects.length - 1}
+                  onMoveUp={() => moveBy(subject.id, -1)}
+                  onMoveDown={() => moveBy(subject.id, 1)}
+                  onUpdated={handleSubjectUpdated}
+                  onDeleted={handleSubjectDeleted}
+                  onDragStartCard={() => {
+                    draggedId.current = subject.id;
+                  }}
+                  onDragOverCard={() => handleDragOver(subject.id)}
+                  onDragEndCard={handleDragEnd}
+                />
+              ))}
+            </div>
+          </>
         )}
       </main>
     </div>
   );
 }
 
-function SubjectCard({ subject, now }: { subject: Subject; now: number }) {
+interface SubjectCardProps {
+  subject: Subject;
+  now: number;
+  isFirst: boolean;
+  isLast: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onUpdated: (subject: Subject) => void;
+  onDeleted: (subjectId: string) => void;
+  onDragStartCard: () => void;
+  onDragOverCard: () => void;
+  onDragEndCard: () => void;
+}
+
+function SubjectCard({
+  subject,
+  now,
+  isFirst,
+  isLast,
+  onMoveUp,
+  onMoveDown,
+  onUpdated,
+  onDeleted,
+  onDragStartCard,
+  onDragOverCard,
+  onDragEndCard,
+}: SubjectCardProps) {
   const summary = subject.summary;
   const mastery = summary?.mastery ?? null;
   const percent = mastery !== null ? Math.round(mastery * 100) : null;
@@ -193,9 +238,30 @@ function SubjectCard({ subject, now }: { subject: Subject; now: number }) {
   return (
     <Link
       href={`/subjects/${subject.id}`}
-      className={`flex min-h-44 flex-col rounded-2xl p-5 transition-transform hover:-translate-y-0.5 ${subjectCardClass(subject.color)}`}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", subject.id);
+        onDragStartCard();
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        onDragOverCard();
+      }}
+      onDrop={(e) => e.preventDefault()}
+      onDragEnd={onDragEndCard}
+      className={`relative flex min-h-44 flex-col rounded-2xl p-5 transition-transform hover:-translate-y-0.5 ${subjectCardClass(subject.color)}`}
     >
-      <p className="font-display text-lg font-semibold">{subject.name}</p>
+      <SubjectCardMenu
+        subject={subject}
+        isFirst={isFirst}
+        isLast={isLast}
+        onMoveUp={onMoveUp}
+        onMoveDown={onMoveDown}
+        onUpdated={onUpdated}
+        onDeleted={onDeleted}
+      />
+      <p className="pr-6 font-display text-lg font-semibold">{subject.name}</p>
       <p className="mt-1 text-sm text-ciruela/60">
         {materials === 0 ? "Sin materiales todavía" : `${materials} ${materials === 1 ? "material" : "materiales"}`}
       </p>
